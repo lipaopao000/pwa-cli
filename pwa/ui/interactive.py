@@ -7,8 +7,7 @@ from typing import List, Optional, Tuple, Callable
 from dataclasses import dataclass
 
 try:
-    from prompt_toolkit import print_formatted_text
-    from prompt_toolkit.formatted_text import FormattedText
+    from prompt_toolkit import prompt
     from prompt_toolkit.shortcuts import radiolist_dialog, button_dialog
     from prompt_toolkit.styles import Style
     PROMPT_TOOLKIT_AVAILABLE = True
@@ -47,16 +46,22 @@ class InteractiveMenu:
         self.show_back = show_back
         self.show_quit = show_quit
         
-        # Build option list
+        # Build option list with numbers
         self.option_list = []
-        for opt in options:
-            self.option_list.append((opt.key, opt.label))
+        for i, opt in enumerate(options, 1):
+            # Include number in the label for display
+            display_label = f"{i}. {opt.label}"
+            if opt.description:
+                display_label += f" - {opt.description}"
+            self.option_list.append((opt.key, display_label))
         
         if show_back:
-            self.option_list.append(('back', '返回上级菜单'))
+            back_num = len(options) + 1
+            self.option_list.append(('back', f'{back_num}. 返回上级菜单'))
         
         if show_quit:
-            self.option_list.append(('quit', '退出'))
+            quit_num = len(options) + (1 if show_back else 0) + 1
+            self.option_list.append(('quit', f'{quit_num}. 退出'))
     
     def show(self) -> Optional[str]:
         """
@@ -72,23 +77,20 @@ class InteractiveMenu:
     
     def _show_with_prompt_toolkit(self) -> Optional[str]:
         """Show menu using prompt_toolkit"""
-        # Define custom style
-        style = Style.from_dict({
-            'dialog': 'bg:#88ff88',
-            'dialog frame.label': 'bg:#ffffff #000000',
-            'dialog.body': 'bg:#000000 #00ff00',
-            'dialog shadow': 'bg:#00aa00',
-        })
-        
-        # Show radio list dialog
-        result = radiolist_dialog(
-            title=self.title,
-            text="使用 ↑/↓ 箭头键选择，Enter 确认，或输入数字快速跳转",
-            values=self.option_list,
-            # style=style,  # Custom style (optional)
-        ).run()
-        
-        return result
+        try:
+            # Show radio list dialog
+            result = radiolist_dialog(
+                title=self.title,
+                text="使用 ↑/↓ 箭头键选择，Enter 确认",
+                values=self.option_list,
+            ).run()
+            
+            return result
+        except Exception as e:
+            # If prompt_toolkit fails, fall back to traditional menu
+            print(f"{Colors.YELLOW}⚠️  交互式菜单出错，切换到传统模式{Colors.RESET}")
+            print(f"{Colors.DIM}错误: {str(e)}{Colors.RESET}\n")
+            return self._show_fallback()
     
     def _show_fallback(self) -> Optional[str]:
         """Fallback menu without arrow key support"""
@@ -96,18 +98,28 @@ class InteractiveMenu:
         print(f"{Colors.BOLD}{self.title}{Colors.RESET}")
         print(f"{Colors.BLUE}{'=' * 60}{Colors.RESET}\n")
         
+        # Display options with numbers
         for i, (key, label) in enumerate(self.option_list, 1):
+            # Extract just the label part (remove number if already present)
+            if '. ' in label:
+                label_parts = label.split('. ', 1)
+                if len(label_parts) > 1:
+                    label = label_parts[1]
             print(f"  {i}. {label}")
         
         print()
         choice = input(f"{Colors.GREEN}请选择 (1-{len(self.option_list)}): {Colors.RESET}").strip()
         
-        try:
+        # Support both number and key input
+        if choice.isdigit():
             idx = int(choice) - 1
             if 0 <= idx < len(self.option_list):
                 return self.option_list[idx][0]
-        except ValueError:
-            pass
+        else:
+            # Try to match by key
+            for key, _ in self.option_list:
+                if key == choice:
+                    return key
         
         return None
     
@@ -128,6 +140,7 @@ class InteractiveMenu:
             selected_key = self.show()
             
             if selected_key is None:
+                print(f"{Colors.YELLOW}无效选择，请重试{Colors.RESET}")
                 continue
             
             if selected_key == 'quit':
@@ -144,6 +157,7 @@ class InteractiveMenu:
                     break
             
             if selected_option is None:
+                print(f"{Colors.YELLOW}无效选择，请重试{Colors.RESET}")
                 continue
             
             # Execute action or show submenu
@@ -158,6 +172,8 @@ class InteractiveMenu:
                     print(f"\n{Colors.YELLOW}操作已取消{Colors.RESET}")
                 except Exception as e:
                     print(f"\n{Colors.RED}错误: {str(e)}{Colors.RESET}")
+                    import traceback
+                    traceback.print_exc()
                     input(f"\n{Colors.DIM}按 Enter 继续...{Colors.RESET}")
 
 
@@ -177,20 +193,24 @@ class ConfirmDialog:
             True if confirmed, False otherwise
         """
         if PROMPT_TOOLKIT_AVAILABLE:
-            result = button_dialog(
-                title=title,
-                text=text,
-                buttons=[
-                    ('yes', '是'),
-                    ('no', '否'),
-                ],
-            ).run()
-            return result == 'yes'
-        else:
-            print(f"\n{Colors.YELLOW}{title}{Colors.RESET}")
-            print(f"{text}\n")
-            choice = input(f"{Colors.GREEN}确认? (y/n): {Colors.RESET}").strip().lower()
-            return choice in ['y', 'yes', '是']
+            try:
+                result = button_dialog(
+                    title=title,
+                    text=text,
+                    buttons=[
+                        ('yes', '是'),
+                        ('no', '否'),
+                    ],
+                ).run()
+                return result == 'yes'
+            except Exception:
+                pass
+        
+        # Fallback
+        print(f"\n{Colors.YELLOW}{title}{Colors.RESET}")
+        print(f"{text}\n")
+        choice = input(f"{Colors.GREEN}确认? (y/n): {Colors.RESET}").strip().lower()
+        return choice in ['y', 'yes', '是']
 
 
 class MessageDialog:
@@ -206,17 +226,22 @@ class MessageDialog:
             text: Dialog text
         """
         if PROMPT_TOOLKIT_AVAILABLE:
-            button_dialog(
-                title=title,
-                text=text,
-                buttons=[
-                    ('ok', '确定'),
-                ],
-            ).run()
-        else:
-            print(f"\n{Colors.BLUE}{title}{Colors.RESET}")
-            print(f"{text}\n")
-            input(f"{Colors.DIM}按 Enter 继续...{Colors.RESET}")
+            try:
+                button_dialog(
+                    title=title,
+                    text=text,
+                    buttons=[
+                        ('ok', '确定'),
+                    ],
+                ).run()
+                return
+            except Exception:
+                pass
+        
+        # Fallback
+        print(f"\n{Colors.BLUE}{title}{Colors.RESET}")
+        print(f"{text}\n")
+        input(f"{Colors.DIM}按 Enter 继续...{Colors.RESET}")
 
 
 def create_simple_menu(title: str, options: List[Tuple[str, str]], 

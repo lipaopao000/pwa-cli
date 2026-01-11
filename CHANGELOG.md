@@ -5,6 +5,29 @@ All notable changes to PWA-CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-01-11
+
+### Fixed
+
+#### 交互式菜单修复 🐛
+- **菜单项显示数字** - 修复菜单项前面没有数字的问题
+- **Enter 键响应** - 改进 radiolist_dialog 的使用，确保 Enter 键正常工作
+- **错误处理增强** - 添加异常捕获，prompt_toolkit 出错时自动降级到传统菜单
+- **降级模式改进** - 传统菜单也正确显示数字和描述
+- **用户反馈** - 无效选择时给出明确提示
+
+### Changed
+- 重写 `pwa/ui/interactive.py` 改进菜单显示和错误处理
+- 菜单选项格式：`"1. 选项名称 - 描述"`
+- 增强降级模式的用户体验
+
+### Tests
+- 新增菜单测试脚本 `test_menu.py`
+- 新增降级模式测试 `test_fallback_menu.py`
+- 验证菜单显示和选择功能
+
+---
+
 ## [1.2.0] - 2026-01-11
 
 ### Added
@@ -168,6 +191,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Version History
 
+- **v1.2.1** (2026-01-11) - 交互式菜单修复
 - **v1.2.0** (2026-01-11) - 箭头键导航 + Session 管理
 - **v1.1.1** (2026-01-11) - Verify 功能修复
 - **v1.1.0** (2026-01-11) - 完整功能版本
