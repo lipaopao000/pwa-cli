@@ -1,3 +1,6 @@
+# Interactive UI
+prompt_toolkit>=3.0.0
+
 # Core dependencies
 pyyaml>=6.0
 requests>=2.28.0

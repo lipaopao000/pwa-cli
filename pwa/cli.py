@@ -9,7 +9,16 @@ from typing import Optional
 
 from .version import __version__, __description__
 from .config import ConfigManager
-from .ui import MenuBuilder, print_success, print_error, print_info, Colors
+from .session import SessionManager
+from .ui import (
+    InteractiveMenu,
+    MenuOption,
+    print_success,
+    print_error,
+    print_info,
+    print_interactive_status,
+    Colors
+)
 
 
 class PWAApplication:
@@ -23,8 +32,14 @@ class PWAApplication:
             config_dir: Custom configuration directory
         """
         self.config_manager = ConfigManager(config_dir)
+        self.session_manager = SessionManager()
+        
+        # Start or resume session
+        self.session = self.session_manager.start_session(resume_last=True)
+        
         self.context = {
             'config_manager': self.config_manager,
+            'session_manager': self.session_manager,
             'version': __version__
         }
         
@@ -38,6 +53,15 @@ class PWAApplication:
         from .commands.fulltext import FullTextDownloadCommand, FullTextStatusCommand, FullTextRetryCommand
         from .commands.verify import VerifyStatementsCommand, VerifyViewResultsCommand, VerifyExportReportCommand
         from .commands.workflow import WorkflowRunFullCommand, WorkflowRunCustomCommand, WorkflowHistoryCommand
+        from .commands.session import (
+            SessionViewCommand,
+            SessionHistoryCommand,
+            SessionListCommand,
+            SessionResumeCommand,
+            SessionCleanupCommand,
+            SessionExportCommand,
+            SessionStatsCommand,
+        )
         
         self.commands = {
             'references_match': ReferencesMatchCommand(self.config_manager),
@@ -51,6 +75,13 @@ class PWAApplication:
             'workflow_run_full': WorkflowRunFullCommand(self.config_manager),
             'workflow_run_custom': WorkflowRunCustomCommand(self.config_manager),
             'workflow_history': WorkflowHistoryCommand(self.config_manager),
+            'session_view': SessionViewCommand(self.config_manager),
+            'session_history': SessionHistoryCommand(self.config_manager),
+            'session_list': SessionListCommand(self.config_manager),
+            'session_resume': SessionResumeCommand(self.config_manager),
+            'session_cleanup': SessionCleanupCommand(self.config_manager),
+            'session_export': SessionExportCommand(self.config_manager),
+            'session_stats': SessionStatsCommand(self.config_manager),
         }
     
     def run_interactive(self):
@@ -64,269 +95,437 @@ class PWAApplication:
         print("\n" + "=" * 60)
         print(Colors.highlight(f"  Paper Writing Assistant (PWA) v{__version__}"))
         print("  " + __description__)
-        print("=" * 60 + "\n")
+        print("=" * 60)
+        
+        # Show session info
+        if self.session:
+            print(f"\n{Colors.DIM}Session: {self.session.session_id}{Colors.RESET}")
+            print(f"{Colors.DIM}工作目录: {self.session.working_directory}{Colors.RESET}")
+        
+        print()
+        print_interactive_status()
+        print()
     
     def _show_goodbye(self):
         """Show goodbye message"""
+        # Save session before exit
+        if self.session_manager:
+            self.session_manager.save_current_session()
+        
         print("\n" + Colors.info("感谢使用 PWA！再见！") + "\n")
     
-    def _create_main_menu(self):
+    def _create_main_menu(self) -> InteractiveMenu:
         """Create main menu"""
-        builder = MenuBuilder(f"Paper Writing Assistant - v{__version__}")
+        options = [
+            MenuOption(
+                key="1",
+                label="参考文献管理",
+                description="提取、匹配、导出参考文献",
+                submenu=self._create_references_menu()
+            ),
+            MenuOption(
+                key="2",
+                label="引用处理",
+                description="替换引用格式",
+                submenu=self._create_citations_menu()
+            ),
+            MenuOption(
+                key="3",
+                label="全文获取",
+                description="下载论文全文",
+                submenu=self._create_fulltext_menu()
+            ),
+            MenuOption(
+                key="4",
+                label="陈述验证",
+                description="验证科学陈述",
+                submenu=self._create_verify_menu()
+            ),
+            MenuOption(
+                key="5",
+                label="工作流管理",
+                description="运行完整工作流",
+                submenu=self._create_workflow_menu()
+            ),
+            MenuOption(
+                key="6",
+                label="Session 管理",
+                description="查看和管理 Session",
+                submenu=self._create_session_menu()
+            ),
+            MenuOption(
+                key="7",
+                label="配置管理",
+                description="管理配置文件",
+                submenu=self._create_config_menu()
+            ),
+            MenuOption(
+                key="8",
+                label="帮助与文档",
+                description="查看帮助文档",
+                submenu=self._create_help_menu()
+            ),
+        ]
         
-        builder.add_item("1", "参考文献管理", self._references_menu)
-        builder.add_item("2", "引用处理", self._citations_menu)
-        builder.add_item("3", "全文获取", self._fulltext_menu)
-        builder.add_item("4", "陈述验证", self._verify_menu)
-        builder.add_separator()
-        builder.add_item("5", "工作流管理", self._workflow_menu)
-        builder.add_item("6", "配置管理", self._config_menu)
-        builder.add_separator()
-        builder.add_item("7", "帮助与文档", self._help_menu)
-        builder.add_exit()
+        return InteractiveMenu(
+            title=f"Paper Writing Assistant - v{__version__}",
+            options=options,
+            show_back=False,
+            show_quit=True
+        )
+    
+    def _create_references_menu(self) -> InteractiveMenu:
+        """Create references management menu"""
+        options = [
+            MenuOption(
+                key="1",
+                label="匹配参考文献",
+                description="从 Markdown 提取并匹配参考文献",
+                action=self._run_command('references_match')
+            ),
+            MenuOption(
+                key="2",
+                label="查看匹配结果",
+                description="查看参考文献匹配结果",
+                action=lambda ctx: print_info("功能开发中...")
+            ),
+            MenuOption(
+                key="3",
+                label="导出参考文献",
+                description="导出参考文献到 BibTeX",
+                action=lambda ctx: print_info("功能开发中...")
+            ),
+            MenuOption(
+                key="4",
+                label="同步 Zotero 库",
+                description="同步 Zotero 参考文献库",
+                action=lambda ctx: print_info("功能开发中...")
+            ),
+        ]
         
-        return builder.build()
+        return InteractiveMenu(
+            title="参考文献管理",
+            options=options,
+            show_back=True,
+            show_quit=False
+        )
     
-    def _references_menu(self, context):
-        """References management submenu"""
-        from .ui import MenuBuilder
+    def _create_citations_menu(self) -> InteractiveMenu:
+        """Create citations menu"""
+        options = [
+            MenuOption(
+                key="1",
+                label="替换引用格式",
+                description="将上标引用替换为 Pandoc 格式",
+                action=self._run_command('citations_replace')
+            ),
+            MenuOption(
+                key="2",
+                label="验证引用",
+                description="验证引用格式正确性",
+                action=lambda ctx: print_info("功能开发中...")
+            ),
+            MenuOption(
+                key="3",
+                label="生成引用报告",
+                description="生成引用统计报告",
+                action=lambda ctx: print_info("功能开发中...")
+            ),
+        ]
         
-        menu = MenuBuilder("参考文献管理")
-        menu.add_item("1", "匹配参考文献", self._references_match)
-        menu.add_item("2", "查看匹配结果", self._references_view_results)
-        menu.add_item("3", "导出参考文献", self._references_export)
-        menu.add_item("4", "同步 Zotero 库", self._references_sync_zotero)
-        menu.add_back()
+        return InteractiveMenu(
+            title="引用处理",
+            options=options,
+            show_back=True,
+            show_quit=False
+        )
+    
+    def _create_fulltext_menu(self) -> InteractiveMenu:
+        """Create fulltext menu"""
+        options = [
+            MenuOption(
+                key="1",
+                label="下载全文",
+                description="使用 Mineru API 下载论文全文",
+                action=self._run_command('fulltext_download')
+            ),
+            MenuOption(
+                key="2",
+                label="查看下载状态",
+                description="查看全文下载状态",
+                action=self._run_command('fulltext_status')
+            ),
+            MenuOption(
+                key="3",
+                label="重试失败任务",
+                description="重试失败的下载任务",
+                action=self._run_command('fulltext_retry')
+            ),
+        ]
         
-        menu.build().run(context)
+        return InteractiveMenu(
+            title="全文获取",
+            options=options,
+            show_back=True,
+            show_quit=False
+        )
     
-    def _citations_menu(self, context):
-        """Citations processing submenu"""
-        from .ui import MenuBuilder
+    def _create_verify_menu(self) -> InteractiveMenu:
+        """Create verify menu"""
+        options = [
+            MenuOption(
+                key="1",
+                label="验证科学陈述",
+                description="使用 RAGFlow 和 PubMed 验证陈述",
+                action=self._run_command('verify_statements')
+            ),
+            MenuOption(
+                key="2",
+                label="查看验证结果",
+                description="查看陈述验证结果",
+                action=self._run_command('verify_view_results')
+            ),
+            MenuOption(
+                key="3",
+                label="导出验证报告",
+                description="导出验证报告",
+                action=self._run_command('verify_export_report')
+            ),
+        ]
         
-        menu = MenuBuilder("引用处理")
-        menu.add_item("1", "替换引用格式", self._citations_replace)
-        menu.add_item("2", "验证引用完整性", self._citations_validate)
-        menu.add_item("3", "生成引用报告", self._citations_report)
-        menu.add_back()
+        return InteractiveMenu(
+            title="陈述验证",
+            options=options,
+            show_back=True,
+            show_quit=False
+        )
+    
+    def _create_workflow_menu(self) -> InteractiveMenu:
+        """Create workflow menu"""
+        options = [
+            MenuOption(
+                key="1",
+                label="运行完整工作流",
+                description="运行完整的论文处理工作流",
+                action=self._run_command('workflow_run_full')
+            ),
+            MenuOption(
+                key="2",
+                label="运行自定义工作流",
+                description="选择步骤运行自定义工作流",
+                action=self._run_command('workflow_run_custom')
+            ),
+            MenuOption(
+                key="3",
+                label="查看工作流历史",
+                description="查看工作流执行历史",
+                action=self._run_command('workflow_history')
+            ),
+        ]
         
-        menu.build().run(context)
+        return InteractiveMenu(
+            title="工作流管理",
+            options=options,
+            show_back=True,
+            show_quit=False
+        )
     
-    def _fulltext_menu(self, context):
-        """Full-text retrieval submenu"""
-        from .ui import MenuBuilder
+    def _create_session_menu(self) -> InteractiveMenu:
+        """Create session menu"""
+        options = [
+            MenuOption(
+                key="1",
+                label="查看当前 Session",
+                description="查看当前 Session 详情",
+                action=self._run_command('session_view')
+            ),
+            MenuOption(
+                key="2",
+                label="查看操作历史",
+                description="查看 Session 操作历史",
+                action=self._run_command('session_history')
+            ),
+            MenuOption(
+                key="3",
+                label="列出所有 Session",
+                description="列出所有 Session",
+                action=self._run_command('session_list')
+            ),
+            MenuOption(
+                key="4",
+                label="恢复历史 Session",
+                description="恢复并切换到历史 Session",
+                action=self._run_command('session_resume')
+            ),
+            MenuOption(
+                key="5",
+                label="清理旧 Session",
+                description="删除旧的 Session 文件",
+                action=self._run_command('session_cleanup')
+            ),
+            MenuOption(
+                key="6",
+                label="导出 Session",
+                description="导出 Session 到文件",
+                action=self._run_command('session_export')
+            ),
+            MenuOption(
+                key="7",
+                label="Session 统计",
+                description="查看 Session 统计信息",
+                action=self._run_command('session_stats')
+            ),
+        ]
         
-        menu = MenuBuilder("全文获取")
-        menu.add_item("1", "下载全文 Markdown", self._fulltext_download)
-        menu.add_item("2", "查看下载状态", self._fulltext_status)
-        menu.add_item("3", "重试失败任务", self._fulltext_retry)
-        menu.add_back()
+        return InteractiveMenu(
+            title="Session 管理",
+            options=options,
+            show_back=True,
+            show_quit=False
+        )
+    
+    def _create_config_menu(self) -> InteractiveMenu:
+        """Create config menu"""
+        options = [
+            MenuOption(
+                key="1",
+                label="查看配置",
+                description="查看当前配置",
+                action=lambda ctx: print_info("功能开发中...")
+            ),
+            MenuOption(
+                key="2",
+                label="编辑配置",
+                description="编辑配置文件",
+                action=lambda ctx: print_info("功能开发中...")
+            ),
+            MenuOption(
+                key="3",
+                label="重置配置",
+                description="重置为默认配置",
+                action=lambda ctx: print_info("功能开发中...")
+            ),
+        ]
         
-        menu.build().run(context)
+        return InteractiveMenu(
+            title="配置管理",
+            options=options,
+            show_back=True,
+            show_quit=False
+        )
     
-    def _verify_menu(self, context):
-        """Statement verification submenu"""
-        from .ui import MenuBuilder
+    def _create_help_menu(self) -> InteractiveMenu:
+        """Create help menu"""
+        options = [
+            MenuOption(
+                key="1",
+                label="用户指南",
+                description="查看用户指南",
+                action=lambda ctx: print_info("功能开发中...")
+            ),
+            MenuOption(
+                key="2",
+                label="命令参考",
+                description="查看命令参考",
+                action=lambda ctx: print_info("功能开发中...")
+            ),
+            MenuOption(
+                key="3",
+                label="配置说明",
+                description="查看配置说明",
+                action=lambda ctx: print_info("功能开发中...")
+            ),
+            MenuOption(
+                key="4",
+                label="关于",
+                description="关于 PWA-CLI",
+                action=self._show_about
+            ),
+        ]
         
-        menu = MenuBuilder("陈述验证")
-        menu.add_item("1", "验证科学陈述", self._verify_statements)
-        menu.add_item("2", "查看验证结果", self._verify_view_results)
-        menu.add_item("3", "导出验证报告", self._verify_export_report)
-        menu.add_back()
+        return InteractiveMenu(
+            title="帮助与文档",
+            options=options,
+            show_back=True,
+            show_quit=False
+        )
+    
+    def _run_command(self, command_name: str):
+        """Create a function to run a command"""
+        def run(context):
+            command = self.commands.get(command_name)
+            if not command:
+                print_error(f"命令未找到: {command_name}")
+                return
+            
+            # Start command timing
+            self.session_manager.start_command()
+            
+            try:
+                # Get parameters interactively
+                params = command.get_interactive_params(context)
+                
+                # Validate parameters
+                if not command.validate(**params):
+                    print_error("参数验证失败")
+                    return
+                
+                # Execute command
+                print_info(f"\n执行命令: {command.description}")
+                result = command.execute(**params, **context)
+                
+                # Record in session history
+                self.session_manager.end_command(
+                    command=command_name,
+                    params=params,
+                    result=result
+                )
+                
+                # Update context with result
+                if result.get('status') == 'success':
+                    # Update context based on command type
+                    if 'md_file' in params:
+                        self.session_manager.set_context('last_md_file', params['md_file'])
+                    if 'bib_file' in params:
+                        self.session_manager.set_context('last_bib_file', params['bib_file'])
+                    if 'output_file' in result:
+                        self.session_manager.set_context('last_output_file', result['output_file'])
+                
+                input(f"\n{Colors.DIM}按 Enter 继续...{Colors.RESET}")
+                
+            except KeyboardInterrupt:
+                print(f"\n{Colors.YELLOW}操作已取消{Colors.RESET}")
+                self.session_manager.end_command(
+                    command=command_name,
+                    params={},
+                    result={'status': 'cancelled'}
+                )
+            except Exception as e:
+                print_error(f"执行失败: {str(e)}")
+                self.session_manager.end_command(
+                    command=command_name,
+                    params={},
+                    result={'status': 'error', 'error': str(e)}
+                )
+                input(f"\n{Colors.DIM}按 Enter 继续...{Colors.RESET}")
         
-        menu.build().run(context)
+        return run
     
-    def _workflow_menu(self, context):
-        """Workflow management submenu"""
-        from .ui import MenuBuilder
-        
-        menu = MenuBuilder("工作流管理")
-        menu.add_item("1", "运行完整工作流", self._workflow_run_full)
-        menu.add_item("2", "运行自定义工作流", self._workflow_run_custom)
-        menu.add_item("3", "查看工作流历史", self._workflow_history)
-        menu.add_back()
-        
-        menu.build().run(context)
-    
-    def _config_menu(self, context):
-        """Configuration management submenu"""
-        from .ui import MenuBuilder
-        
-        menu = MenuBuilder("配置管理")
-        menu.add_item("1", "查看配置列表", self._config_list)
-        menu.add_item("2", "编辑 LLM 配置", self._config_edit_llm)
-        menu.add_item("3", "编辑 Zotero 配置", self._config_edit_zotero)
-        menu.add_item("4", "编辑 RAGFlow 配置", self._config_edit_ragflow)
-        menu.add_item("5", "编辑 OCR API 配置", self._config_edit_ocr)
-        menu.add_separator()
-        menu.add_item("6", "重置配置", self._config_reset)
-        menu.add_back()
-        
-        menu.build().run(context)
-    
-    def _help_menu(self, context):
-        """Help and documentation submenu"""
-        from .ui import MenuBuilder
-        
-        menu = MenuBuilder("帮助与文档")
-        menu.add_item("1", "查看用户指南", self._help_user_guide)
-        menu.add_item("2", "查看命令参考", self._help_command_reference)
-        menu.add_item("3", "查看配置说明", self._help_config_guide)
-        menu.add_item("4", "关于 PWA", self._help_about)
-        menu.add_back()
-        
-        menu.build().run(context)
-    
-    # ========== References Commands ==========
-    
-    def _references_match(self, context):
-        """Match references command"""
-        cmd = self.commands['references_match']
-        cmd.interactive_execute(context)
-    
-    def _references_view_results(self, context):
-        """View reference matching results"""
-        print_info("功能开发中：查看匹配结果")
-    
-    def _references_export(self, context):
-        """Export references"""
-        print_info("功能开发中：导出参考文献")
-    
-    def _references_sync_zotero(self, context):
-        """Sync Zotero library"""
-        print_info("功能开发中：同步 Zotero 库")
-    
-    # ========== Citations Commands ==========
-    
-    def _citations_replace(self, context):
-        """Replace citation format"""
-        cmd = self.commands['citations_replace']
-        cmd.interactive_execute(context)
-    
-    def _citations_validate(self, context):
-        """Validate citations"""
-        print_info("功能开发中：验证引用完整性")
-    
-    def _citations_report(self, context):
-        """Generate citation report"""
-        print_info("功能开发中：生成引用报告")
-    
-    # ========== Fulltext Commands ==========
-    
-    def _fulltext_download(self, context):
-        """Download full-text Markdown"""
-        cmd = self.commands['fulltext_download']
-        cmd.interactive_execute(context)
-    
-    def _fulltext_status(self, context):
-        """View download status"""
-        cmd = self.commands['fulltext_status']
-        cmd.interactive_execute(context)
-    
-    def _fulltext_retry(self, context):
-        """Retry failed downloads"""
-        cmd = self.commands['fulltext_retry']
-        cmd.interactive_execute(context)
-    
-    # ========== Verify Commands ==========
-    
-    def _verify_statements(self, context):
-        """Verify scientific statements"""
-        cmd = self.commands['verify_statements']
-        cmd.interactive_execute(context)
-    
-    def _verify_view_results(self, context):
-        """View verification results"""
-        cmd = self.commands['verify_view_results']
-        cmd.interactive_execute(context)
-    
-    def _verify_export_report(self, context):
-        """Export verification report"""
-        cmd = self.commands['verify_export_report']
-        cmd.interactive_execute(context)
-    
-    # ========== Workflow Commands ==========
-    
-    def _workflow_run_full(self, context):
-        """Run full workflow"""
-        cmd = self.commands['workflow_run_full']
-        cmd.interactive_execute(context)
-    
-    def _workflow_run_custom(self, context):
-        """Run custom workflow"""
-        cmd = self.commands['workflow_run_custom']
-        cmd.interactive_execute(context)
-    
-    def _workflow_history(self, context):
-        """View workflow history"""
-        cmd = self.commands['workflow_history']
-        cmd.interactive_execute(context)
-    
-    # ========== Config Commands ==========
-    
-    def _config_list(self, context):
-        """List all configurations"""
-        print_info("\n当前配置文件列表：\n")
-        configs = self.config_manager.list_configs()
-        
-        if not configs:
-            print_info("未找到配置文件")
-            return
-        
-        for name, path in configs.items():
-            print(f"  • {Colors.highlight(name)}: {path}")
-        
-        print(f"\n配置目录: {Colors.highlight(str(self.config_manager.config_dir))}")
-    
-    def _config_edit_llm(self, context):
-        """Edit LLM configuration"""
-        print_info("功能开发中：编辑 LLM 配置")
-    
-    def _config_edit_zotero(self, context):
-        """Edit Zotero configuration"""
-        print_info("功能开发中：编辑 Zotero 配置")
-    
-    def _config_edit_ragflow(self, context):
-        """Edit RAGFlow configuration"""
-        print_info("功能开发中：编辑 RAGFlow 配置")
-    
-    def _config_edit_ocr(self, context):
-        """Edit OCR API configuration"""
-        print_info("功能开发中：编辑 OCR API 配置")
-    
-    def _config_reset(self, context):
-        """Reset configuration"""
-        print_info("功能开发中：重置配置")
-    
-    # ========== Help Commands ==========
-    
-    def _help_user_guide(self, context):
-        """Show user guide"""
-        print_info("\n=== PWA 用户指南 ===\n")
-        print("PWA (Paper Writing Assistant) 是一个学术写作辅助工具。")
-        print("\n主要功能：")
-        print("  1. 参考文献管理 - 从 Markdown 提取参考文献并与 Zotero/BibTeX 库匹配")
-        print("  2. 引用处理 - 将上标引用替换为 Pandoc BibTeX 格式")
-        print("  3. 全文获取 - 使用 Mineru API 获取论文全文 Markdown")
-        print("  4. 陈述验证 - 使用 RAGFlow 和 PubMed 验证科学陈述")
-        print("\n详细文档请访问: https://github.com/lipaopao000/pwa-cli")
-    
-    def _help_command_reference(self, context):
-        """Show command reference"""
-        print_info("功能开发中：命令参考")
-    
-    def _help_config_guide(self, context):
-        """Show configuration guide"""
-        print_info("功能开发中：配置说明")
-    
-    def _help_about(self, context):
+    def _show_about(self, context):
         """Show about information"""
-        print_info(f"\n=== 关于 PWA ===\n")
+        print("\n" + "=" * 60)
+        print(Colors.highlight("关于 PWA-CLI"))
+        print("=" * 60 + "\n")
+        
         print(f"版本: {__version__}")
         print(f"描述: {__description__}")
-        print(f"作者: lipaopao000")
-        print(f"仓库: https://github.com/lipaopao000/pwa-cli")
+        print(f"GitHub: https://github.com/lipaopao000/pwa-cli")
+        print(f"\n作者: lipaopao000")
         print(f"许可: MIT License")
+        
+        print("\n" + "=" * 60 + "\n")
+        
+        input(f"{Colors.DIM}按 Enter 继续...{Colors.RESET}")
 
 
 def main():
@@ -339,42 +538,25 @@ def main():
     parser.add_argument(
         '--version',
         action='version',
-        version=f'PWA v{__version__}'
+        version=f'PWA-CLI v{__version__}'
     )
     
     parser.add_argument(
         '--config-dir',
         type=Path,
-        help='自定义配置目录'
-    )
-    
-    parser.add_argument(
-        '--interactive',
-        action='store_true',
-        default=True,
-        help='交互式菜单模式（默认）'
+        help='Custom configuration directory'
     )
     
     args = parser.parse_args()
     
     try:
         app = PWAApplication(config_dir=args.config_dir)
-        
-        if args.interactive or len(sys.argv) == 1:
-            # Run interactive mode
-            app.run_interactive()
-        else:
-            # Command-line mode (to be implemented)
-            print_error("命令行模式尚未实现，请使用交互式模式")
-            sys.exit(1)
-    
+        app.run_interactive()
     except KeyboardInterrupt:
-        print("\n\n操作已取消")
+        print("\n\n" + Colors.warning("程序已中断") + "\n")
         sys.exit(0)
     except Exception as e:
         print_error(f"发生错误: {str(e)}")
-        import traceback
-        traceback.print_exc()
         sys.exit(1)
 
 
