@@ -141,8 +141,8 @@ class VerifyStatementsCommand(BaseCommand):
             Dictionary with execution results
         """
         try:
-            from ..verifier.statement_verifier import ScientificStatementVerifier
-            from ..verifier.utils import parse_markdown_to_statements
+            from ..agents.citation.statement_verifier import ScientificStatementVerifier
+            from ..agents.citation.utils import parse_markdown_to_statements
             from ..clients.ragflow import RagFlowClient
             from ..clients.pubmed import PubMedClient
             from ..clients.zotero import fetch_preferred_references
