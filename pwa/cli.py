@@ -35,10 +35,22 @@ class PWAApplication:
         """Initialize command instances"""
         from .commands.references import ReferencesMatchCommand
         from .commands.citations import CitationsReplaceCommand
+        from .commands.fulltext import FullTextDownloadCommand, FullTextStatusCommand, FullTextRetryCommand
+        from .commands.verify import VerifyStatementsCommand, VerifyViewResultsCommand, VerifyExportReportCommand
+        from .commands.workflow import WorkflowRunFullCommand, WorkflowRunCustomCommand, WorkflowHistoryCommand
         
         self.commands = {
             'references_match': ReferencesMatchCommand(self.config_manager),
             'citations_replace': CitationsReplaceCommand(self.config_manager),
+            'fulltext_download': FullTextDownloadCommand(self.config_manager),
+            'fulltext_status': FullTextStatusCommand(self.config_manager),
+            'fulltext_retry': FullTextRetryCommand(self.config_manager),
+            'verify_statements': VerifyStatementsCommand(self.config_manager),
+            'verify_view_results': VerifyViewResultsCommand(self.config_manager),
+            'verify_export_report': VerifyExportReportCommand(self.config_manager),
+            'workflow_run_full': WorkflowRunFullCommand(self.config_manager),
+            'workflow_run_custom': WorkflowRunCustomCommand(self.config_manager),
+            'workflow_history': WorkflowHistoryCommand(self.config_manager),
         }
     
     def run_interactive(self):
@@ -203,46 +215,52 @@ class PWAApplication:
     
     def _fulltext_download(self, context):
         """Download full-text Markdown"""
-        print_info("功能开发中：下载全文 Markdown")
-        print_info("此功能将使用 Mineru API 获取论文全文")
+        cmd = self.commands['fulltext_download']
+        cmd.interactive_execute(context)
     
     def _fulltext_status(self, context):
         """View download status"""
-        print_info("功能开发中：查看下载状态")
+        cmd = self.commands['fulltext_status']
+        cmd.interactive_execute(context)
     
     def _fulltext_retry(self, context):
         """Retry failed downloads"""
-        print_info("功能开发中：重试失败任务")
+        cmd = self.commands['fulltext_retry']
+        cmd.interactive_execute(context)
     
     # ========== Verify Commands ==========
     
     def _verify_statements(self, context):
         """Verify scientific statements"""
-        print_info("功能开发中：验证科学陈述")
-        print_info("此功能将使用 RAGFlow 和 PubMed 验证论文中的科学陈述")
+        cmd = self.commands['verify_statements']
+        cmd.interactive_execute(context)
     
     def _verify_view_results(self, context):
         """View verification results"""
-        print_info("功能开发中：查看验证结果")
+        cmd = self.commands['verify_view_results']
+        cmd.interactive_execute(context)
     
     def _verify_export_report(self, context):
         """Export verification report"""
-        print_info("功能开发中：导出验证报告")
+        cmd = self.commands['verify_export_report']
+        cmd.interactive_execute(context)
     
     # ========== Workflow Commands ==========
     
     def _workflow_run_full(self, context):
         """Run full workflow"""
-        print_info("功能开发中：运行完整工作流")
-        print_info("完整工作流包括：参考文献匹配 → 引用替换 → 全文获取 → 陈述验证")
+        cmd = self.commands['workflow_run_full']
+        cmd.interactive_execute(context)
     
     def _workflow_run_custom(self, context):
         """Run custom workflow"""
-        print_info("功能开发中：运行自定义工作流")
+        cmd = self.commands['workflow_run_custom']
+        cmd.interactive_execute(context)
     
     def _workflow_history(self, context):
         """View workflow history"""
-        print_info("功能开发中：查看工作流历史")
+        cmd = self.commands['workflow_history']
+        cmd.interactive_execute(context)
     
     # ========== Config Commands ==========
     
