@@ -2,138 +2,61 @@
 """
 utils.py
 
-Shared utility functions for the paper-writing-assistant skill.
-Includes logging, configuration management, file I/O, text processing, and data parsing.
+Shared utility functions for PWA core modules.
+Includes file I/O, text processing, and data parsing.
+
+Note: Configuration and logging management has been moved to pwa.config and Python's logging module.
+      Colors have been moved to pwa.ui.colors.
 """
 
 import os
-import sys
-import logging
-import yaml
-import json
 import re
-import shutil
-import hashlib
-from typing import Dict, List, Optional, Any, Tuple, Union
+import json
+import logging
+from typing import Dict, List, Optional, Any
 
 # Try to import bibtexparser, handle if missing
 try:
     import bibtexparser
     from bibtexparser.bparser import BibTexParser
-    from bibtexparser.customization import convert_to_unicode, author
+    from bibtexparser.customization import convert_to_unicode
     BIBTEXPARSER_AVAILABLE = True
 except ImportError:
     BIBTEXPARSER_AVAILABLE = False
 
-# ANSI Color Codes
-class Colors:
-    GREEN = '\033[92m'
-    YELLOW = '\033[93m'
-    RED = '\033[91m'
-    BLUE = '\033[94m'
-    CYAN = '\033[96m'
-    RESET = '\033[0m'
+# Get logger for this module
+logger = logging.getLogger(__name__)
 
-def setup_logging(name: str, log_file: Optional[str] = None, level: int = logging.INFO) -> logging.Logger:
-    """
-    Sets up a logger with both console and file handlers.
-    
-    Args:
-        name: Logger name.
-        log_file: Path to the log file. If None, only console logging is enabled.
-        level: Logging level (default: logging.INFO).
-        
-    Returns:
-        Configured logger instance.
-    """
-    logger = logging.getLogger(name)
-    logger.setLevel(level)
-    logger.handlers = []  # Clear existing handlers to prevent duplicates
-
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-
-    # Console Handler
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.WARNING if level == logging.DEBUG else level) # Keep console clean usually
-    console_handler.setFormatter(logging.Formatter('%(message)s')) # Simple format for console
-    logger.addHandler(console_handler)
-
-    # File Handler
-    if log_file:
-        try:
-            file_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')
-            file_handler.setLevel(level)
-            file_handler.setFormatter(formatter)
-            logger.addHandler(file_handler)
-        except Exception as e:
-            print(f"{Colors.YELLOW}[Warning] Could not setup file logging to {log_file}: {e}{Colors.RESET}", file=sys.stderr)
-
-    return logger
-
-def load_yaml_config(config_path: str) -> Optional[Dict[str, Any]]:
-    """Loads a YAML configuration file."""
-    if not os.path.exists(config_path):
-        return None
-    try:
-        with open(config_path, 'r', encoding='utf-8') as f:
-            return yaml.safe_load(f)
-    except Exception as e:
-        print(f"{Colors.RED}[Error] Failed to load config {config_path}: {e}{Colors.RESET}", file=sys.stderr)
-        return None
 
 def load_markdown_content(file_path: str) -> str:
-    """Loads content from a Markdown file."""
+    """
+    Loads content from a Markdown file.
+    
+    Args:
+        file_path: Path to the Markdown file.
+        
+    Returns:
+        Content of the file as a string, or empty string on error.
+    """
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             return f.read()
     except Exception as e:
-        print(f"{Colors.RED}[Error] Failed to load Markdown file {file_path}: {e}{Colors.RESET}", file=sys.stderr)
+        logger.error(f"Failed to load Markdown file {file_path}: {e}")
         return ""
 
-def get_or_create_config_cache_dir(md_path: str) -> str:
-    """
-    Gets or creates the 'config-and-cache' directory relative to the Markdown file.
-    If md_path is in CWD, creates it in CWD.
-    """
-    md_dir = os.path.dirname(os.path.abspath(md_path))
-    cache_dir = os.path.join(md_dir, 'config-and-cache')
-    os.makedirs(cache_dir, exist_ok=True)
-    return cache_dir
-
-def ensure_config_in_cache(config_name: str, cache_dir: str, source_dir: str = None) -> str:
-    """
-    Ensures a configuration file exists in the cache directory by copying it from the source directory.
-    
-    Args:
-        config_name: Name of the config file (e.g., 'zotero_config.yaml').
-        cache_dir: Destination directory.
-        source_dir: Source directory (default: current working directory).
-        
-    Returns:
-        Path to the cached config file.
-    """
-    if source_dir is None:
-        source_dir = os.getcwd()
-        
-    cached_config_path = os.path.join(cache_dir, config_name)
-    source_config_path = os.path.join(source_dir, config_name)
-
-    if not os.path.exists(cached_config_path):
-        if os.path.exists(source_config_path):
-            try:
-                shutil.copy(source_config_path, cached_config_path)
-                # Using print here as logger might not be set up yet
-                # print(f"Copied {config_name} to {cache_dir}", file=sys.stderr)
-            except Exception as e:
-                print(f"{Colors.YELLOW}[Warning] Failed to copy {config_name}: {e}{Colors.RESET}", file=sys.stderr)
-        else:
-            # print(f"{Colors.YELLOW}[Warning] {config_name} not found in {source_dir}.{Colors.RESET}", file=sys.stderr)
-            pass
-            
-    return cached_config_path
 
 def calculate_jaccard_similarity(text1: str, text2: str) -> float:
-    """Calculates Jaccard similarity between two strings."""
+    """
+    Calculates Jaccard similarity between two strings.
+    
+    Args:
+        text1: First text string.
+        text2: Second text string.
+        
+    Returns:
+        Jaccard similarity score (0.0 to 1.0).
+    """
     set1 = set(re.findall(r'\w+', text1.lower()))
     set2 = set(re.findall(r'\w+', text2.lower()))
     if not set1 or not set2:
@@ -142,8 +65,17 @@ def calculate_jaccard_similarity(text1: str, text2: str) -> float:
     union = set1.union(set2)
     return len(intersection) / len(union)
 
+
 def normalize_doi(doi: str) -> str:
-    """Normalizes a DOI string by removing prefixes."""
+    """
+    Normalizes a DOI string by removing prefixes.
+    
+    Args:
+        doi: DOI string (may include https://doi.org/ prefix).
+        
+    Returns:
+        Normalized DOI string.
+    """
     if not doi:
         return ''
     doi = doi.strip().lower()
@@ -152,13 +84,21 @@ def normalize_doi(doi: str) -> str:
     doi = re.sub(r'^doi:', '', doi)
     return doi.strip()
 
+
 def parse_biblatex_content(biblatex_content: str) -> List[Dict[str, Any]]:
     """
     Parses BibLaTeX content into a list of dictionaries.
+    
     Standardizes keys: ID, title, abstract, doi, url, file_paths.
+    
+    Args:
+        biblatex_content: BibLaTeX content as a string.
+        
+    Returns:
+        List of parsed entry dictionaries.
     """
     if not BIBTEXPARSER_AVAILABLE:
-        print(f"{Colors.YELLOW}[Warning] bibtexparser not found. Using regex fallback (less reliable).{Colors.RESET}", file=sys.stderr)
+        logger.warning("bibtexparser not found. Using regex fallback (less reliable).")
         return _parse_biblatex_regex(biblatex_content)
 
     try:
@@ -189,7 +129,8 @@ def parse_biblatex_content(biblatex_content: str) -> List[Dict[str, Any]]:
             if file_field:
                 for f_part in file_field.split(';'):
                     f_part = f_part.strip()
-                    if not f_part: continue
+                    if not f_part:
+                        continue
                     # Logic to extract path. Usually it's between two colons or at the end.
                     # Zotero: Name:Path:Type
                     # But sometimes just Path if manual.
@@ -219,24 +160,34 @@ def parse_biblatex_content(biblatex_content: str) -> List[Dict[str, Any]]:
                 'doi': doi,
                 'url': url,
                 'file_paths': file_paths,
-                'raw': entry # Keep raw just in case
+                'raw': entry  # Keep raw just in case
             })
             
         return parsed_entries
     except Exception as e:
-        print(f"{Colors.RED}[Error] BibLaTeX parsing failed: {e}{Colors.RESET}", file=sys.stderr)
+        logger.error(f"BibLaTeX parsing failed: {e}")
         return []
 
+
 def _parse_biblatex_regex(content: str) -> List[Dict[str, Any]]:
-    """Fallback Regex parser for BibLaTeX."""
+    """
+    Fallback Regex parser for BibLaTeX.
+    
+    Args:
+        content: BibLaTeX content as a string.
+        
+    Returns:
+        List of parsed entry dictionaries.
+    """
     entries = []
     # Split by @type{
     raw_entries = re.split(r'@\w+\s*\{', content)
     
-    for raw in raw_entries[1:]: # Skip preamble
+    for raw in raw_entries[1:]:  # Skip preamble
         # Extract ID (first string before comma)
         id_match = re.match(r'([^,]+),', raw)
-        if not id_match: continue
+        if not id_match:
+            continue
         entry_id = id_match.group(1).strip()
         
         # Simple extractors
@@ -248,13 +199,13 @@ def _parse_biblatex_regex(content: str) -> List[Dict[str, Any]]:
         
         file_paths = []
         if file_field:
-             if '.pdf' in file_field.lower():
-                 # Very basic extraction
-                 parts = file_field.split(':')
-                 for p in parts:
-                     if p.lower().endswith('.pdf'):
-                         if os.path.exists(p.strip()):
-                             file_paths.append(p.strip())
+            if '.pdf' in file_field.lower():
+                # Very basic extraction
+                parts = file_field.split(':')
+                for p in parts:
+                    if p.lower().endswith('.pdf'):
+                        if os.path.exists(p.strip()):
+                            file_paths.append(p.strip())
         
         entries.append({
             'ID': entry_id,
@@ -266,8 +217,18 @@ def _parse_biblatex_regex(content: str) -> List[Dict[str, Any]]:
         })
     return entries
 
+
 def _extract_field_regex(text: str, field: str) -> str:
-    """Helper to extract field value using regex."""
+    """
+    Helper to extract field value using regex.
+    
+    Args:
+        text: Text to search in.
+        field: Field name to extract.
+        
+    Returns:
+        Extracted field value or empty string.
+    """
     # Matches field = {value} or field = "value"
     pattern = re.compile(rf'{field}\s*=\s*[\{{"](.*?)(?<!\\)[\}}"]', re.IGNORECASE | re.DOTALL)
     match = pattern.search(text)
@@ -276,17 +237,26 @@ def _extract_field_regex(text: str, field: str) -> str:
         return val.replace('\n', ' ').strip()
     return ""
 
+
 def parse_json_content(json_content: str) -> List[Dict[str, Any]]:
     """
     Parses CSL JSON content into a list of dictionaries.
+    
     Standardizes keys: ID, title, abstract, doi, url.
+    
+    Args:
+        json_content: JSON content as a string.
+        
+    Returns:
+        List of parsed entry dictionaries.
     """
     try:
         data = json.loads(json_content)
         parsed_entries = []
         for item in data:
             entry_id = str(item.get('id', '')) or str(item.get('ID', ''))
-            if not entry_id: continue
+            if not entry_id:
+                continue
             
             title = item.get('title', '')
             abstract = item.get('abstract', '')
@@ -299,9 +269,9 @@ def parse_json_content(json_content: str) -> List[Dict[str, Any]]:
                 'abstract': abstract,
                 'doi': doi,
                 'url': url,
-                'file_paths': [] # JSON export usually doesn't include local file paths in the same way
+                'file_paths': []  # JSON export usually doesn't include local file paths in the same way
             })
         return parsed_entries
     except Exception as e:
-        print(f"{Colors.RED}[Error] JSON parsing failed: {e}{Colors.RESET}", file=sys.stderr)
+        logger.error(f"JSON parsing failed: {e}")
         return []

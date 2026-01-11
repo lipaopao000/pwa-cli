@@ -255,4 +255,5 @@ class CitationsReplaceCommand(BaseCommand):
         print(f"  {Colors.success(f'成功替换: {total}')}")
         
         if stats['failed'] > 0:
-            print(f"  {Colors.warning(f'失败: {stats['failed']}')}")
+            failed_count = stats['failed']
+            print(f"  {Colors.warning(f'失败: {failed_count}')}")
