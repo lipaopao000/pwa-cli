@@ -4,6 +4,16 @@ requests>=2.28.0
 bibtexparser>=1.4.0
 openai>=1.0.0
 
+# LangChain and LangGraph for AI Agent
+langchain>=0.1.0
+langchain-core>=0.1.0
+langchain-openai>=0.0.5
+langgraph>=0.0.20
+langsmith>=0.0.70
+
+# Pydantic for structured output
+pydantic>=2.0.0
+
 # Optional dependencies
 aiohttp>=3.8.0
 tqdm>=4.65.0

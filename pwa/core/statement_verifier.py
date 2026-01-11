@@ -12,10 +12,10 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from langgraph.graph import StateGraph, END, START
 
 # Local imports
-from core.configuration import Configuration
-from core.state import AgentState, Evidence
-from core.schemas import LocalSupportEvaluation, GlobalFactualityEvaluation, SearchQuery
-from core.prompts import (
+from .configuration import Configuration
+from .state import AgentState, Evidence
+from .schemas import LocalSupportEvaluation, GlobalFactualityEvaluation, SearchQuery
+from .prompts import (
     LOCAL_SUPPORT_SYSTEM_PROMPT, 
     GLOBAL_FACTUALITY_SYSTEM_PROMPT, 
     SEARCH_QUERY_SYSTEM_PROMPT
@@ -377,5 +377,5 @@ class ScientificStatementVerifier:
 def parse_markdown_to_statements(content: str) -> List[Dict[str, Any]]:
     # Keep original parsing logic as it was working fine
     # (Omitted here for brevity in the replacement call, but I will ensure it remains in the file)
-    from core.statement_verifier_utils import parse_markdown_to_statements as original_parse
+    from .statement_verifier_utils import parse_markdown_to_statements as original_parse
     return original_parse(content)
