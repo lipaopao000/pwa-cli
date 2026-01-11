@@ -1,0 +1,7 @@
+# RAGFlow Configuration
+ragflow_base_url: "https://rag.toofun.fun/"
+ragflow_api_key: "ragflow-XY0lmj-1kvyIUsPH6Hvu4Yg3DhvozRkZvuk1t3ZPK1k"
+dataset_name: "Paper_References"
+
+# PubMed Configuration (Required for Web Search fallback)
+email: "lipaopao000@gmail.com" # Required by NCBI

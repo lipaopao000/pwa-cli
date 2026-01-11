@@ -1,0 +1,44 @@
+# LLM Configuration File
+# 通过修改 'active_provider' 字段来选择使用的模型服务商。
+# 大部分国内大模型（DeepSeek, Moonshot/Kimi, 智谱GLM, 通义千问等）都支持 OpenAI 兼容接口。
+
+active_provider: "deepseek" # 当前激活的服务商，可选: openai, deepseek, moonshot, zhipu, qwen, azure
+
+providers:
+  openai:
+    temperature: 0.1
+    description: "OpenAI Official"
+    api_key: "sk-..." # 请替换为您的 Key
+    base_url: "https://api.openai.com/v1"
+    model: "gpt-4o-mini" # 或 gpt-4o
+
+  deepseek:
+    description: "DeepSeek (深度求索)"
+    api_key: "sk-423f45fd02e94d81bf4e05f2442237d3" # 请替换为您的 Key
+    base_url: "https://api.deepseek.com"
+    model: "deepseek-reasoner"
+    temperature: 0.0
+
+  moonshot:
+    description: "Moonshot AI (Kimi)"
+    api_key: "sk-..." # 请替换为您的 Key
+    base_url: "https://api.moonshot.cn/v1"
+    model: "moonshot-v1-8k"
+
+  zhipu:
+    description: "Zhipu AI (智谱GLM)"
+    api_key: "..." # 请替换为您的 Key
+    base_url: "https://open.bigmodel.cn/api/paas/v4/"
+    model: "glm-4"
+
+  qwen:
+    description: "Alibaba Qwen (通义千问)"
+    api_key: "sk-..." # 请替换为您的 Key
+    base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    model: "qwen-plus"
+
+web_search:
+  email: "lipaopao000@gmail.com" # PubMed 搜索必需，用于标识请求者
+  tavily_api_key: "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" # Tavily 搜索必需，用于互联网实时搜索
+
+
