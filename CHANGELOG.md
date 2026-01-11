@@ -5,6 +5,25 @@ All notable changes to PWA-CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2026-01-11
+
+### Changed
+
+#### 切换到 InquirerPy 🎯
+- **替换 prompt_toolkit** - 使用 InquirerPy 替代 prompt_toolkit 的 radiolist_dialog
+- **更稳定的交互** - InquirerPy 提供更可靠的箭头键导航
+- **更好的用户体验** - 更清晰的提示信息和分隔符支持
+- **优雅降级** - 保持传统菜单作为降级方案
+
+### Dependencies
+- **替换**: `prompt_toolkit>=3.0.0` → `InquirerPy>=0.3.4`
+
+### Fixed
+- 修复 prompt_toolkit radiolist_dialog 的响应问题
+- 改进菜单显示和交互体验
+
+---
+
 ## [1.2.1] - 2026-01-11
 
 ### Fixed

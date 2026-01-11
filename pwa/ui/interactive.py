@@ -1,18 +1,18 @@
 """
-Interactive menu with arrow key navigation
+Interactive menu with arrow key navigation using InquirerPy
 """
 
 import sys
-from typing import List, Optional, Tuple, Callable
+from typing import List, Optional, Tuple, Callable, Dict
 from dataclasses import dataclass
 
 try:
-    from prompt_toolkit import prompt
-    from prompt_toolkit.shortcuts import radiolist_dialog, button_dialog
-    from prompt_toolkit.styles import Style
-    PROMPT_TOOLKIT_AVAILABLE = True
+    from InquirerPy import inquirer
+    from InquirerPy.base.control import Choice
+    from InquirerPy.separator import Separator
+    INQUIRER_AVAILABLE = True
 except ImportError:
-    PROMPT_TOOLKIT_AVAILABLE = False
+    INQUIRER_AVAILABLE = False
 
 from .colors import Colors
 
@@ -28,7 +28,7 @@ class MenuOption:
 
 
 class InteractiveMenu:
-    """Interactive menu with arrow key navigation"""
+    """Interactive menu with arrow key navigation using InquirerPy"""
     
     def __init__(self, title: str, options: List[MenuOption], 
                  show_back: bool = False, show_quit: bool = True):
@@ -45,23 +45,6 @@ class InteractiveMenu:
         self.options = options
         self.show_back = show_back
         self.show_quit = show_quit
-        
-        # Build option list with numbers
-        self.option_list = []
-        for i, opt in enumerate(options, 1):
-            # Include number in the label for display
-            display_label = f"{i}. {opt.label}"
-            if opt.description:
-                display_label += f" - {opt.description}"
-            self.option_list.append((opt.key, display_label))
-        
-        if show_back:
-            back_num = len(options) + 1
-            self.option_list.append(('back', f'{back_num}. 返回上级菜单'))
-        
-        if show_quit:
-            quit_num = len(options) + (1 if show_back else 0) + 1
-            self.option_list.append(('quit', f'{quit_num}. 退出'))
     
     def show(self) -> Optional[str]:
         """
@@ -70,24 +53,53 @@ class InteractiveMenu:
         Returns:
             Selected option key or None
         """
-        if PROMPT_TOOLKIT_AVAILABLE:
-            return self._show_with_prompt_toolkit()
+        if INQUIRER_AVAILABLE:
+            return self._show_with_inquirer()
         else:
             return self._show_fallback()
     
-    def _show_with_prompt_toolkit(self) -> Optional[str]:
-        """Show menu using prompt_toolkit"""
+    def _show_with_inquirer(self) -> Optional[str]:
+        """Show menu using InquirerPy"""
         try:
-            # Show radio list dialog
-            result = radiolist_dialog(
-                title=self.title,
-                text="使用 ↑/↓ 箭头键选择，Enter 确认",
-                values=self.option_list,
-            ).run()
+            # Build choices
+            choices = []
+            
+            # Add menu options
+            for i, opt in enumerate(self.options, 1):
+                name = f"{i}. {opt.label}"
+                if opt.description:
+                    name += f" - {opt.description}"
+                choices.append(Choice(value=opt.key, name=name))
+            
+            # Add separator before back/quit
+            if self.show_back or self.show_quit:
+                choices.append(Separator())
+            
+            # Add back option
+            if self.show_back:
+                back_num = len(self.options) + 1
+                choices.append(Choice(value='back', name=f'{back_num}. 返回上级菜单'))
+            
+            # Add quit option
+            if self.show_quit:
+                quit_num = len(self.options) + (1 if self.show_back else 0) + 1
+                choices.append(Choice(value='quit', name=f'{quit_num}. 退出'))
+            
+            # Show menu
+            result = inquirer.select(
+                message=self.title,
+                choices=choices,
+                default=choices[0].value if choices else None,
+                pointer="❯",
+                instruction="(使用 ↑↓ 箭头键选择，Enter 确认)",
+            ).execute()
             
             return result
+            
+        except KeyboardInterrupt:
+            return 'quit'
         except Exception as e:
-            # If prompt_toolkit fails, fall back to traditional menu
+            # If InquirerPy fails, fall back to traditional menu
             print(f"{Colors.YELLOW}⚠️  交互式菜单出错，切换到传统模式{Colors.RESET}")
             print(f"{Colors.DIM}错误: {str(e)}{Colors.RESET}\n")
             return self._show_fallback()
@@ -98,26 +110,44 @@ class InteractiveMenu:
         print(f"{Colors.BOLD}{self.title}{Colors.RESET}")
         print(f"{Colors.BLUE}{'=' * 60}{Colors.RESET}\n")
         
-        # Display options with numbers
-        for i, (key, label) in enumerate(self.option_list, 1):
-            # Extract just the label part (remove number if already present)
-            if '. ' in label:
-                label_parts = label.split('. ', 1)
-                if len(label_parts) > 1:
-                    label = label_parts[1]
-            print(f"  {i}. {label}")
+        # Build option list
+        option_list = []
+        for i, opt in enumerate(self.options, 1):
+            display = f"{i}. {opt.label}"
+            if opt.description:
+                display += f" - {opt.description}"
+            option_list.append((opt.key, display))
+            print(f"  {display}")
+        
+        # Add separator
+        if self.show_back or self.show_quit:
+            print()
+        
+        # Add back option
+        if self.show_back:
+            back_num = len(self.options) + 1
+            back_display = f"{back_num}. 返回上级菜单"
+            option_list.append(('back', back_display))
+            print(f"  {back_display}")
+        
+        # Add quit option
+        if self.show_quit:
+            quit_num = len(self.options) + (1 if self.show_back else 0) + 1
+            quit_display = f"{quit_num}. 退出"
+            option_list.append(('quit', quit_display))
+            print(f"  {quit_display}")
         
         print()
-        choice = input(f"{Colors.GREEN}请选择 (1-{len(self.option_list)}): {Colors.RESET}").strip()
+        choice = input(f"{Colors.GREEN}请选择 (1-{len(option_list)}): {Colors.RESET}").strip()
         
         # Support both number and key input
         if choice.isdigit():
             idx = int(choice) - 1
-            if 0 <= idx < len(self.option_list):
-                return self.option_list[idx][0]
+            if 0 <= idx < len(option_list):
+                return option_list[idx][0]
         else:
             # Try to match by key
-            for key, _ in self.option_list:
+            for key, _ in option_list:
                 if key == choice:
                     return key
         
@@ -192,17 +222,19 @@ class ConfirmDialog:
         Returns:
             True if confirmed, False otherwise
         """
-        if PROMPT_TOOLKIT_AVAILABLE:
+        if INQUIRER_AVAILABLE:
             try:
-                result = button_dialog(
-                    title=title,
-                    text=text,
-                    buttons=[
-                        ('yes', '是'),
-                        ('no', '否'),
-                    ],
-                ).run()
-                return result == 'yes'
+                print(f"\n{Colors.YELLOW}{title}{Colors.RESET}")
+                print(f"{text}\n")
+                
+                result = inquirer.confirm(
+                    message="确认?",
+                    default=False,
+                ).execute()
+                
+                return result
+            except KeyboardInterrupt:
+                return False
             except Exception:
                 pass
         
@@ -225,20 +257,6 @@ class MessageDialog:
             title: Dialog title
             text: Dialog text
         """
-        if PROMPT_TOOLKIT_AVAILABLE:
-            try:
-                button_dialog(
-                    title=title,
-                    text=text,
-                    buttons=[
-                        ('ok', '确定'),
-                    ],
-                ).run()
-                return
-            except Exception:
-                pass
-        
-        # Fallback
         print(f"\n{Colors.BLUE}{title}{Colors.RESET}")
         print(f"{text}\n")
         input(f"{Colors.DIM}按 Enter 继续...{Colors.RESET}")
@@ -271,16 +289,17 @@ def create_simple_menu(title: str, options: List[Tuple[str, str]],
     )
 
 
-# Check if prompt_toolkit is available
+# Check if InquirerPy is available
 def check_interactive_support() -> bool:
     """Check if interactive features are available"""
-    return PROMPT_TOOLKIT_AVAILABLE
+    return INQUIRER_AVAILABLE
 
 
 def print_interactive_status():
     """Print interactive feature status"""
-    if PROMPT_TOOLKIT_AVAILABLE:
-        print(f"{Colors.GREEN}✅ 交互式导航已启用 (使用箭头键){Colors.RESET}")
+    if INQUIRER_AVAILABLE:
+        print(f"{Colors.GREEN}✅ 交互式导航已启用 (InquirerPy){Colors.RESET}")
+        print(f"{Colors.DIM}   提示: 使用 ↑↓ 箭头键选择，Enter 确认{Colors.RESET}")
     else:
         print(f"{Colors.YELLOW}⚠️  交互式导航不可用 (使用数字选择){Colors.RESET}")
-        print(f"{Colors.DIM}   提示: 运行 'pip install prompt_toolkit' 启用箭头键导航{Colors.RESET}")
+        print(f"{Colors.DIM}   提示: 运行 'pip install InquirerPy' 启用箭头键导航{Colors.RESET}")
