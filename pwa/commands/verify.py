@@ -141,13 +141,13 @@ class VerifyStatementsCommand(BaseCommand):
             Dictionary with execution results
         """
         try:
-            from ..core.statement_verifier import ScientificStatementVerifier
-            from ..core.statement_verifier_utils import parse_markdown_to_statements
-            from ..core.ragflow_client import RagFlowClient
-            from ..core.pubmed_client import PubMedClient
-            from ..core.zotero_client import fetch_preferred_references
+            from ..verifier.statement_verifier import ScientificStatementVerifier
+            from ..verifier.utils import parse_markdown_to_statements
+            from ..clients.ragflow import RagFlowClient
+            from ..clients.pubmed import PubMedClient
+            from ..clients.zotero import fetch_preferred_references
             from ..core.utils import parse_biblatex_content, parse_json_content
-            from ..core.citation_agent import load_fulltext_md_content, get_fulltext_md_path
+            from ..agents.citation import load_fulltext_md_content, get_fulltext_md_path
             from tqdm import tqdm
             
             print_info("\n=== 开始科学陈述验证 ===\n")
@@ -346,7 +346,7 @@ class VerifyStatementsCommand(BaseCommand):
     
     def _sync_documents_to_rag(self, rag_client, dataset_id: str, statements: List[Dict]) -> Dict:
         """Sync full-text documents to RAGFlow"""
-        from ..core.citation_agent import get_fulltext_md_path
+        from ..agents.citation import get_fulltext_md_path
         from tqdm import tqdm
         
         try:
@@ -378,7 +378,7 @@ class VerifyStatementsCommand(BaseCommand):
                                    dataset_id: Optional[str], doc_map: Dict,
                                    llm_settings: Dict) -> Dict:
         """Process single statement verification"""
-        from ..core.citation_agent import load_fulltext_md_content
+        from ..agents.citation import load_fulltext_md_content
         import re
         
         citation_id = stmt_data.get('citation_id')

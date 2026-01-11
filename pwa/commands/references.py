@@ -16,7 +16,7 @@ from ..core.utils import (
     load_markdown_content,
     normalize_doi,
 )
-from ..core.zotero_client import fetch_preferred_references
+from ..clients.zotero import fetch_preferred_references
 from ..ui import print_success, print_error, print_warning, print_info, Colors
 
 

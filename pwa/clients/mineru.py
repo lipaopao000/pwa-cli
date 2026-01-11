@@ -18,7 +18,7 @@ from urllib3.util.retry import Retry
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from ..core.utils import parse_biblatex_content
-from ..core.zotero_client import fetch_preferred_references
+from .zotero import fetch_preferred_references
 
 
 # Constants

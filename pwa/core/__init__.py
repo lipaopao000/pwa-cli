@@ -1,7 +1,11 @@
 """
-Core functionality modules for PWA
+Core utility functions for PWA
 
-This package contains core utilities and clients for PWA-CLI.
+This package contains core utility functions for data processing.
+Agent, client, and verifier modules have been moved to their own packages:
+- pwa.agents - Agent implementations
+- pwa.clients - External service clients  
+- pwa.verifier - Statement verification
 """
 
 from .utils import (
@@ -12,32 +16,10 @@ from .utils import (
     parse_json_content,
 )
 
-from .zotero_client import (
-    ZoteroClient,
-    fetch_preferred_references,
-)
-
 __all__ = [
-    # Utils
     'load_markdown_content',
     'calculate_jaccard_similarity',
     'normalize_doi',
     'parse_biblatex_content',
     'parse_json_content',
-    
-    # Zotero Client
-    'ZoteroClient',
-    'fetch_preferred_references',
-    
-    # Module references (for direct import)
-    'ragflow_client',
-    'pubmed_client',
-    'statement_verifier',
-    'statement_verifier_utils',
-    'configuration',
-    'state',
-    'schemas',
-    'prompts',
-    'base_agent',
-    'citation_agent',
 ]

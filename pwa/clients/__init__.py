@@ -1,14 +1,18 @@
 """
-External service clients for PWA
+Client modules for external services
+
+This package contains client implementations for various external services.
 """
 
-# Import clients from core module for backward compatibility
-from ..core.zotero_client import fetch_preferred_references
-from ..core.pubmed_client import PubMedClient
-from ..core.ragflow_client import RagFlowClient
+from .mineru import MineruClient
+from .pubmed import PubMedClient
+from .ragflow import RagFlowClient as RAGFlowClient
+from .zotero import ZoteroClient, fetch_preferred_references
 
 __all__ = [
-    'fetch_preferred_references',
+    'MineruClient',
     'PubMedClient',
-    'RagFlowClient',
+    'RAGFlowClient',
+    'ZoteroClient',
+    'fetch_preferred_references',
 ]
