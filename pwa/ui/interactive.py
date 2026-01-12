@@ -1,5 +1,5 @@
 """
-Interactive menu with arrow key navigation using InquirerPy
+Interactive menu with arrow key navigation and number shortcuts using InquirerPy
 """
 
 import sys
@@ -10,6 +10,8 @@ try:
     from InquirerPy import inquirer
     from InquirerPy.base.control import Choice
     from InquirerPy.separator import Separator
+    from prompt_toolkit.keys import Keys
+    from prompt_toolkit.key_binding import KeyBindings
     INQUIRER_AVAILABLE = True
 except ImportError:
     INQUIRER_AVAILABLE = False
@@ -28,7 +30,7 @@ class MenuOption:
 
 
 class InteractiveMenu:
-    """Interactive menu with arrow key navigation using InquirerPy"""
+    """Interactive menu with arrow key navigation and number shortcuts using InquirerPy"""
     
     def __init__(self, title: str, options: List[MenuOption], 
                  show_back: bool = False, show_quit: bool = True):
@@ -45,6 +47,7 @@ class InteractiveMenu:
         self.options = options
         self.show_back = show_back
         self.show_quit = show_quit
+        self._number_to_key = {}  # Map number to option key
     
     def show(self) -> Optional[str]:
         """
@@ -58,8 +61,16 @@ class InteractiveMenu:
         else:
             return self._show_fallback()
     
+    def _build_number_mapping(self, choices: List) -> Dict[str, str]:
+        """Build mapping from number keys to option keys"""
+        mapping = {}
+        for i, choice in enumerate(choices, 1):
+            if hasattr(choice, 'value') and choice.value:
+                mapping[str(i)] = choice.value
+        return mapping
+    
     def _show_with_inquirer(self) -> Optional[str]:
-        """Show menu using InquirerPy"""
+        """Show menu using InquirerPy with number shortcuts"""
         try:
             # Build choices
             choices = []
@@ -85,13 +96,29 @@ class InteractiveMenu:
                 quit_num = len(self.options) + (1 if self.show_back else 0) + 1
                 choices.append(Choice(value='quit', name=f'{quit_num}. 退出'))
             
-            # Show menu
+            # Build number to key mapping (excluding separators)
+            self._number_to_key = self._build_number_mapping(choices)
+            
+            # Create custom key bindings for number shortcuts
+            kb = KeyBindings()
+            
+            # Add number key bindings (1-9 and 0)
+            for num in '1234567890':
+                @kb.add(num)
+                def _(event, n=num):
+                    """Handle number key press"""
+                    if n in self._number_to_key:
+                        # Set the result and exit
+                        event.app.exit(result=self._number_to_key[n])
+            
+            # Show menu with custom key bindings
             result = inquirer.select(
                 message=self.title,
                 choices=choices,
                 default=choices[0].value if choices else None,
                 pointer="❯",
-                instruction="(使用 ↑↓ 箭头键选择，Enter 确认)",
+                instruction="(使用 ↑↓ 箭头键或输入数字选择，Enter 确认)",
+                keybindings=kb,
             ).execute()
             
             return result
@@ -299,7 +326,7 @@ def print_interactive_status():
     """Print interactive feature status"""
     if INQUIRER_AVAILABLE:
         print(f"{Colors.GREEN}✅ 交互式导航已启用 (InquirerPy){Colors.RESET}")
-        print(f"{Colors.DIM}   提示: 使用 ↑↓ 箭头键选择，Enter 确认{Colors.RESET}")
+        print(f"{Colors.DIM}   提示: 使用 ↑↓ 箭头键或输入数字选择，Enter 确认{Colors.RESET}")
     else:
         print(f"{Colors.YELLOW}⚠️  交互式导航不可用 (使用数字选择){Colors.RESET}")
         print(f"{Colors.DIM}   提示: 运行 'pip install InquirerPy' 启用箭头键导航{Colors.RESET}")
