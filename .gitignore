@@ -138,6 +138,10 @@ config-and-cache/
 FullTextMD/
 *.log
 .ragflow/
+.markitdown/
+
+# Test files
+tests/test_files/
 
 # Configuration files (contain sensitive data)
 configs/*.yaml

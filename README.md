@@ -11,6 +11,7 @@
 - 📚 **参考文献管理** - 自动匹配 Markdown 文档中的参考文献与 Zotero/BibTeX 库
 - 🔗 **引用处理** - 将上标引用转换为 Pandoc BibTeX 格式
 - 📄 **全文获取** - 使用 Mineru API 批量获取论文全文 Markdown
+- 📝 **文档转换** - 使用 MarkItDown 将 DOCX、PDF、PPTX 等格式转换为 Markdown
 - ✅ **陈述验证** - 使用 RAGFlow 和 PubMed 验证科学陈述的准确性
 - 🔧 **高扩展性** - 插件式架构，方便添加新功能
 - 📦 **配置管理** - 集中化的配置管理系统
@@ -33,6 +34,9 @@ pip install -e .
 
 # 安装 RAGFlow SDK (用于陈述验证功能)
 ./scripts/install_ragflow_sdk.sh
+
+# 安装 MarkItDown (用于文档转换功能)
+./scripts/install_markitdown.sh
 ```
 
 ### 使用 pip 安装（即将支持）
@@ -99,7 +103,19 @@ pwa verify statements paper.md
 - 支持断点续传
 - 输出高质量的 Markdown 格式
 
-### 4. 陈述验证
+### 4. 文档转换
+
+使用自定义的 MarkItDown 库将各种文档格式转换为 Markdown。
+
+**功能特点：**
+- 支持多种格式：DOCX, PDF, PPTX, XLSX, HTML, TXT, CSV, JSON, XML
+- 保留文档结构和格式
+- 简单易用的 API
+- 批量转换支持
+
+详细使用说明请参见 [docs/markitdown.md](docs/markitdown.md)
+
+### 5. 陈述验证
 
 验证论文中的科学陈述是否有充分的文献支持。
 
