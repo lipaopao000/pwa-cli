@@ -137,6 +137,7 @@ Thumbs.db
 config-and-cache/
 FullTextMD/
 *.log
+.ragflow/
 
 # Configuration files (contain sensitive data)
 configs/*.yaml

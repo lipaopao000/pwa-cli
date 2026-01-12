@@ -30,6 +30,9 @@ pip install -r requirements.txt
 
 # 安装 PWA
 pip install -e .
+
+# 安装 RAGFlow SDK (用于陈述验证功能)
+./scripts/install_ragflow_sdk.sh
 ```
 
 ### 使用 pip 安装（即将支持）
