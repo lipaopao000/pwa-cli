@@ -1,0 +1,21 @@
+# Zotero Configuration
+# Copy this file to zotero_config.yaml and fill in your actual credentials
+
+# Zotero Library ID
+# Find it in your Zotero account settings
+library_id: "your-library-id-here"
+
+# Zotero Library Type
+# Options: "user" or "group"
+library_type: "user"
+
+# Zotero API Key
+# Generate it from https://www.zotero.org/settings/keys
+api_key: "your-zotero-api-key-here"
+
+# Collection ID (optional)
+# If you want to work with a specific collection
+collection_id: ""
+
+# Request timeout in seconds
+timeout: 30

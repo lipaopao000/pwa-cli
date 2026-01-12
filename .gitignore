@@ -138,6 +138,11 @@ config-and-cache/
 FullTextMD/
 *.log
 
+# Configuration files (contain sensitive data)
+configs/*.yaml
+!configs/*.yaml.example
+!configs/*.yaml.template
+
 # Temporary files
 *.tmp
 *.bak

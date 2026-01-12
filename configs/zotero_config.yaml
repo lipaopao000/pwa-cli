@@ -1,4 +1,0 @@
-zotero:
-  api_enabled: true
-  bibtex_url: "http://127.0.0.1:23119/better-bibtex/export?/library;id:1/collection;key:U7A6U5LI/乳腺炎.bibtex"
-  csl_json_url: "http://127.0.0.1:23119/better-bibtex/export?/library;id:1/collection;key:U7A6U5LI/乳腺炎.json"

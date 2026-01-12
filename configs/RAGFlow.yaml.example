@@ -1,0 +1,17 @@
+# RAGFlow Configuration
+# Copy this file to RAGFlow.yaml and fill in your actual credentials
+
+# RAGFlow API Key
+# Get it from your RAGFlow dashboard
+api_key: "your-ragflow-api-key-here"
+
+# RAGFlow Base URL
+# Usually the URL where your RAGFlow instance is hosted
+base_url: "https://your-ragflow-instance.com"
+
+# Default dataset ID (optional)
+# You can specify a default dataset to use
+default_dataset_id: ""
+
+# Request timeout in seconds
+timeout: 30

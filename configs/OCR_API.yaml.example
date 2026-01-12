@@ -1,0 +1,15 @@
+# Mineru OCR API Configuration
+# Copy this file to OCR_API.yaml and fill in your actual API token
+
+# API Token from https://open.pdf2file.com/
+# Sign up and get your token from the dashboard
+token: "your-mineru-api-token-here"
+
+# API Base URL (usually no need to change)
+base_url: "https://open.pdf2file.com"
+
+# Request timeout in seconds
+timeout: 30
+
+# Max retries for failed requests
+max_retries: 3
