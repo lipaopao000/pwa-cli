@@ -32,12 +32,12 @@ fi
 
 echo "✅ RAGFlow SDK directory found: $SDK_DIR"
 
-# Install SDK dependencies (without installing the package itself)
-echo "📦 Installing SDK dependencies..."
+# Install SDK in editable mode
+echo "📦 Installing SDK in editable mode..."
 cd "$SDK_DIR"
 
-# Install common dependencies
-pip install requests pydantic 2>/dev/null || echo "   (Some dependencies may already be installed)"
+# Install SDK and its dependencies
+pip install -e . 2>/dev/null || pip install requests pydantic beartype && pip install -e .
 
 # Verify installation
 echo ""

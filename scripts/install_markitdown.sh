@@ -32,20 +32,16 @@ fi
 
 echo "✅ markitdown source directory found: $MARKITDOWN_SRC"
 
-# Install markitdown dependencies
-echo "📦 Installing markitdown dependencies..."
+# Install markitdown in editable mode
+echo "📦 Installing markitdown in editable mode..."
 cd "$MARKITDOWN_DIR/packages/markitdown"
 
-# Check if requirements.txt or pyproject.toml exists
-if [ -f "requirements.txt" ]; then
-    pip install -r requirements.txt 2>/dev/null || echo "   (Some dependencies may already be installed)"
-elif [ -f "pyproject.toml" ]; then
-    # Extract dependencies from pyproject.toml
-    pip install python-docx mammoth pillow beautifulsoup4 lxml pdfplumber pandas openpyxl pptx youtube-transcript-api 2>/dev/null || echo "   (Some dependencies may already be installed)"
-else
-    # Install common dependencies
-    pip install python-docx mammoth pillow beautifulsoup4 lxml 2>/dev/null || echo "   (Some dependencies may already be installed)"
-fi
+# Install package and its dependencies
+pip install -e . 2>/dev/null || {
+    echo "   (Standard install failed, trying manual dependencies...)"
+    pip install python-docx mammoth pillow beautifulsoup4 lxml pdfplumber pandas openpyxl pptx youtube-transcript-api
+    pip install -e .
+}
 
 # Verify installation
 echo ""

@@ -88,39 +88,57 @@ class InteractiveMenu:
             
             # Add back option
             if self.show_back:
-                back_num = len(self.options) + 1
-                choices.append(Choice(value='back', name=f'{back_num}. 返回上级菜单'))
+                # Use '0' as shortcut for Back if it's a submenu
+                choices.append(Choice(value='back', name='0. 返回上级菜单'))
             
             # Add quit option
             if self.show_quit:
-                quit_num = len(self.options) + (1 if self.show_back else 0) + 1
-                choices.append(Choice(value='quit', name=f'{quit_num}. 退出'))
+                # Use '0' as shortcut for Quit if it's the main menu (no back option)
+                if not self.show_back:
+                    choices.append(Choice(value='quit', name='0. 退出'))
+                else:
+                    quit_num = len(self.options) + 2
+                    choices.append(Choice(value='quit', name=f'{quit_num}. 退出'))
             
-            # Build number to key mapping (excluding separators)
-            self._number_to_key = self._build_number_mapping(choices)
+            # Build number to key mapping
+            self._number_to_key = {}
+            # Map menu options (1-9)
+            for i, opt in enumerate(self.options, 1):
+                self._number_to_key[str(i)] = opt.key
             
-            # Create custom key bindings for number shortcuts
-            kb = KeyBindings()
+            # Map 0 to Back or Quit
+            if self.show_back:
+                self._number_to_key['0'] = 'back'
+            elif self.show_quit:
+                self._number_to_key['0'] = 'quit'
             
-            # Add number key bindings (1-9 and 0)
-            for num in '1234567890':
-                @kb.add(num)
-                def _(event, n=num):
-                    """Handle number key press"""
-                    if n in self._number_to_key:
-                        # Set the result and exit
-                        event.app.exit(result=self._number_to_key[n])
-            
-            # Show menu with custom key bindings
-            result = inquirer.select(
+            # Create prompt instance
+            prompt = inquirer.select(
                 message=self.title,
                 choices=choices,
                 default=choices[0].value if choices else None,
                 pointer="❯",
                 instruction="(使用 ↑↓ 箭头键或输入数字选择，Enter 确认)",
-                keybindings=kb,
-            ).execute()
+            )
             
+            # Register number key bindings
+            for num in '1234567890':
+                if num in self._number_to_key:
+                    def make_handler(n):
+                        @prompt.register_kb(n)
+                        def _(event):
+                            # Find the choice with the corresponding value
+                            for i, choice in enumerate(prompt.content_control.choices):
+                                # InquirerPy choices are stored as dicts internally
+                                choice_value = choice.get('value') if isinstance(choice, dict) else getattr(choice, 'value', None)
+                                if choice_value == self._number_to_key[n]:
+                                    prompt.content_control.selected_choice_index = i
+                                    prompt._handle_enter(event)
+                                    break
+                    make_handler(num)
+            
+            # Run the prompt
+            result = prompt.execute()
             return result
             
         except KeyboardInterrupt:
@@ -152,26 +170,41 @@ class InteractiveMenu:
         
         # Add back option
         if self.show_back:
-            back_num = len(self.options) + 1
+            back_num = 0
             back_display = f"{back_num}. 返回上级菜单"
             option_list.append(('back', back_display))
             print(f"  {back_display}")
         
         # Add quit option
         if self.show_quit:
-            quit_num = len(self.options) + (1 if self.show_back else 0) + 1
+            if not self.show_back:
+                quit_num = 0
+            else:
+                quit_num = len(self.options) + 2
             quit_display = f"{quit_num}. 退出"
             option_list.append(('quit', quit_display))
             print(f"  {quit_display}")
         
         print()
-        choice = input(f"{Colors.GREEN}请选择 (1-{len(option_list)}): {Colors.RESET}").strip()
+        choice = input(f"{Colors.GREEN}请选择: {Colors.RESET}").strip()
         
         # Support both number and key input
         if choice.isdigit():
+            # Special handling for fallback 0
+            if choice == '0':
+                if self.show_back:
+                    return 'back'
+                elif self.show_quit:
+                    return 'quit'
+            
             idx = int(choice) - 1
-            if 0 <= idx < len(option_list):
-                return option_list[idx][0]
+            if 0 <= idx < len(self.options):
+                return self.options[idx].key
+            
+            # Handle non-0 quit
+            if self.show_quit and self.show_back:
+                if int(choice) == len(self.options) + 2:
+                    return 'quit'
         else:
             # Try to match by key
             for key, _ in option_list:
