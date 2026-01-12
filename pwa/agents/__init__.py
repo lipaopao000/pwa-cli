@@ -11,7 +11,7 @@ from .base import BaseAcademicAgent as BaseAgent
 from .citation import CitationAgent, StatementVerifier
 
 __all__ = [
-    'BaseAgent',
-    'CitationAgent',
-    'StatementVerifier',
+    "BaseAgent",
+    "CitationAgent",
+    "StatementVerifier",
 ]

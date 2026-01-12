@@ -1,5 +1,5 @@
-import os
 import logging
+import os
 import sys
 
 # Add RAGFlow SDK to Python path
@@ -26,15 +26,16 @@ class RagFlowClient:
     Wrapper for RAGFlow Python SDK.
     Uses official SDK but extends it where API coverage is incomplete.
     """
+
     def __init__(self, base_url, api_key):
         # SDK expects base_url without /api/v1
-        self.base_url = base_url.rstrip('/')
-        if self.base_url.endswith('/api/v1'):
-             self.base_url = self.base_url[:-7].rstrip('/')
-             
+        self.base_url = base_url.rstrip("/")
+        if self.base_url.endswith("/api/v1"):
+            self.base_url = self.base_url[:-7].rstrip("/")
+
         self.api_key = api_key
         self.logger = logging.getLogger("RagFlowClient")
-        
+
         # Initialize official SDK
         self.sdk = RAGFlow(api_key=self.api_key, base_url=self.base_url)
 
@@ -93,7 +94,7 @@ class RagFlowClient:
         try:
             if name is None:
                 name = os.path.basename(file_path)
-            
+
             ds = self.sdk.get_dataset(dataset_id)
             doc = ds.upload_document(file_path=file_path, name=name)
             return doc.id

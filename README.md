@@ -26,11 +26,14 @@
 git clone https://github.com/lipaopao000/pwa-cli.git
 cd pwa-cli
 
-# 安装依赖
-pip install -r requirements.txt
-
-# 安装 PWA
+# 安装 PWA（包含所有依赖）
 pip install -e .
+
+# 或安装开发依赖（用于贡献代码）
+pip install -e .[dev]
+
+# 使用 Makefile 简化安装
+make install-dev
 
 # 安装 RAGFlow SDK (用于陈述验证功能)
 ./scripts/install_ragflow_sdk.sh
@@ -181,14 +184,15 @@ pwa-cli/
 
 ```bash
 # 运行所有测试
-pytest
+make test
 
-# 运行特定模块测试
-pytest tests/test_commands/
+# 运行测试并生成覆盖率报告
+make test-cov
 
-# 生成覆盖率报告
-pytest --cov=pwa --cov-report=html
-```
+# 或直接使用 pytest
+pytest tests/ -v
+pytest tests/ -v --cov=pwa --cov-report=html
+````
 
 ## 📝 开发
 
@@ -215,16 +219,26 @@ class MyCommand(BaseCommand):
 
 ### 代码风格
 
-使用 Black 格式化代码：
+使用 Black 和 isort 格式化代码：
 
 ```bash
-black pwa/
+# 使用 Makefile
+make format
+
+# 或手动运行
+black pwa/ tests/ --line-length=100
+isort pwa/ tests/
 ```
 
-使用 Flake8 检查代码：
+使用 Flake8 和 mypy 检查代码：
 
 ```bash
-flake8 pwa/
+# 使用 Makefile
+make lint
+
+# 或手动运行
+flake8 pwa/ tests/ --max-line-length=100
+mypy pwa/ --ignore-missing-imports
 ```
 
 ## 🤝 贡献
@@ -236,6 +250,8 @@ flake8 pwa/
 3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
 5. 开启 Pull Request
+
+详细的开发指南请参见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 📄 许可证
 
