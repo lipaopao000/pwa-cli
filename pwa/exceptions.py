@@ -1,12 +1,16 @@
+"""Custom exceptions for PWA CLI.
 """
-Custom exceptions for PWA CLI.
-"""
+
+from typing import Optional
 
 
 class PWAError(Exception):
     """Base exception for all PWA errors."""
 
-    pass
+    def __init__(self, message: str, details: Optional[dict] = None):
+        super().__init__(message)
+        self.message = message
+        self.details = details or {}
 
 
 class ConfigurationError(PWAError):
@@ -30,7 +34,30 @@ class FileNotFoundError(PWAError):
 class APIError(PWAError):
     """Base class for API-related errors."""
 
-    pass
+    def __init__(self, message: str, status_code: Optional[int] = None, details: Optional[dict] = None):
+        super().__init__(message, details)
+        self.status_code = status_code
+
+
+class AuthenticationError(APIError):
+    """Raised when authentication fails."""
+
+    def __init__(self, message: str, details: Optional[dict] = None):
+        super().__init__(message, status_code=401, details=details)
+
+
+class RateLimitError(APIError):
+    """Raised when rate limit is exceeded."""
+
+    def __init__(self, message: str, details: Optional[dict] = None):
+        super().__init__(message, status_code=429, details=details)
+
+
+class NetworkError(APIError):
+    """Raised when network operation fails."""
+
+    def __init__(self, message: str, details: Optional[dict] = None):
+        super().__init__(message, details=details)
 
 
 class ZoteroAPIError(APIError):

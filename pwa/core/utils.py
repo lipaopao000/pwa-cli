@@ -67,6 +67,52 @@ def calculate_jaccard_similarity(text1: str, text2: str) -> float:
     return len(intersection) / len(union)
 
 
+def extract_doi(text: str) -> Optional[str]:
+    """
+    Extracts DOI from text.
+
+    Args:
+        text: Text to search for DOI.
+
+    Returns:
+        DOI string if found, None otherwise.
+    """
+    if not text:
+        return None
+    
+    # Pattern for DOI: 10.xxxx/xxxxx
+    doi_pattern = r'10\.\d{4,}(?:\.\d+)*\/(?:(?!["&\'<>])\S)+'
+    match = re.search(doi_pattern, text)
+    if match:
+        return match.group(0)
+    return None
+
+
+def normalize_title(title: str) -> str:
+    """
+    Normalizes a title for comparison.
+
+    Args:
+        title: Title string to normalize.
+
+    Returns:
+        Normalized title (lowercase, no punctuation, single spaces).
+    """
+    if not title:
+        return ""
+    
+    # Convert to lowercase
+    title = title.lower()
+    
+    # Remove punctuation
+    title = re.sub(r'[^\w\s]', ' ', title)
+    
+    # Normalize whitespace
+    title = ' '.join(title.split())
+    
+    return title.strip()
+
+
 def normalize_doi(doi: str) -> str:
     """
     Normalizes a DOI string by removing prefixes.

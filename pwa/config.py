@@ -96,7 +96,9 @@ class ConfigManager:
 
         return self.config_dir / filename
 
-    def load_config(self, name: str, validate: bool = False) -> Optional[Dict[str, Any]]:
+    def load_config(
+        self, name: str, validate: bool = False
+    ) -> Optional[Union[Dict[str, Any], LLMConfig, ZoteroConfig, OCRAPIConfig, RAGFlowConfig]]:
         """
         Load a configuration file.
 
@@ -121,9 +123,10 @@ class ConfigManager:
                 config_data = yaml.safe_load(f)
 
             if validate and config_data:
-                config_data = self._validate_config(name, config_data)
+                validated = self._validate_config(name, config_data)
+                return validated
 
-            return config_data
+            return config_data  # type: ignore[no-any-return]
 
         except yaml.YAMLError as e:
             raise ConfigurationError(f"Failed to parse YAML config {config_path}: {e}") from e
@@ -157,7 +160,8 @@ class ConfigManager:
         validator = validators.get(name)
         if validator:
             try:
-                return validator(config_data)
+                result = validator(config_data)
+                return result  # type: ignore[return-value]
             except ConfigValidationError as e:
                 logger.error(f"Config validation failed for {name}: {e}")
                 raise
