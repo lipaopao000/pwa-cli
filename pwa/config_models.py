@@ -53,10 +53,12 @@ class LLMConfig(BaseModel):
 class ZoteroConfig(BaseModel):
     """Configuration for Zotero API."""
 
-    api_key: str = Field(..., description="Zotero API key")
-    user_id: str = Field(..., description="Zotero user ID")
+    api_key: Optional[str] = Field(None, description="Zotero API key")
+    user_id: Optional[str] = Field(None, description="Zotero user ID")
     library_type: str = Field(default="user", description="Library type (user or group)")
     collection_id: Optional[str] = Field(default=None, description="Optional collection ID")
+    port: str = Field(default="23119", description="Better BibTeX API port")
+    database: str = Field(default="Zotero", description="Database type (Zotero or Juris-M)")
 
     @field_validator("library_type")
     @classmethod

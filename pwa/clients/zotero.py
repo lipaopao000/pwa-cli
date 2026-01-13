@@ -2,22 +2,22 @@
 """
 zotero_client.py
 
-Client for interacting with Zotero API (local or remote) to fetch references.
+Client for interacting with Zotero via Better BibTeX JSON-RPC API.
+Provides direct access to Zotero's annotations without requiring PDF extraction.
 """
 
+import json
 import logging
 import os
-import ssl
-import urllib.parse
-import urllib.request
-from typing import Any, Dict, Optional, Tuple
+import requests
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 logger = logging.getLogger(__name__)
 
 
 class ZoteroClient:
     """
-    A simple client to fetch references from Zotero.
+    A client to interact with Zotero's local Better BibTeX JSON-RPC API.
     """
 
     def __init__(self, config: Optional[Dict[str, Any]] = None, config_path: Optional[str] = None):
@@ -25,35 +25,41 @@ class ZoteroClient:
         Initialize the ZoteroClient.
 
         Args:
-            config: Zotero configuration dictionary (preferred).
-            config_path: Path to the zotero_config.yaml file (fallback).
+            config: Zotero configuration dictionary.
+            config_path: Path to the configuration file (fallback).
         """
-        self.config = config or self._load_config(config_path)
+        raw_config = config or self._load_config(config_path)
+        if not raw_config:
+            self.zcfg = {}
+        else:
+            # Handle both direct ZoteroConfig and nested config
+            self.zcfg = raw_config.get("zotero") if "zotero" in raw_config else raw_config
+
+        self.port = self.zcfg.get("port", "23119")
+        database = self.zcfg.get("database", "Zotero")
+        if database == "Juris-M":
+            self.port = "24119"
+
+        self.base_url = f"http://127.0.0.1:{self.port}/better-bibtex/json-rpc"
+        self.headers = {
+            'Content-Type': 'application/json',
+            'User-Agent': 'PWA-CLI ZoteroClient/1.0',
+            'Accept': 'application/json',
+            'Connection': 'keep-alive',
+        }
 
     def _load_config(self, config_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """
-        Loads Zotero configuration.
-
-        Args:
-            config_path: Path to the zotero_config.yaml file.
-
-        Returns:
-            Configuration dictionary or None.
-        """
-        # Try to use ConfigManager if available
+        """Loads Zotero configuration."""
         try:
             from ..config import ConfigManager
-
             config_manager = ConfigManager()
-            return config_manager.get_config("zotero")
+            return config_manager.load_config("zotero")
         except Exception as e:
-            logger.warning(f"ConfigManager not available, trying direct path: {e}")
+            logger.warning(f"ConfigManager not available or failed: {e}")
 
-        # Fallback to direct file loading
         if config_path and os.path.exists(config_path):
             try:
                 import yaml
-
                 with open(config_path, "r", encoding="utf-8") as f:
                     return yaml.safe_load(f)
             except Exception as e:
@@ -61,80 +67,287 @@ class ZoteroClient:
 
         return None
 
-    def _http_get(self, url: str, timeout: int = 15) -> Optional[str]:
+    def _make_rpc_request(self, method: str, params: List[Any]) -> Any:
+        """Make a JSON-RPC request to the Zotero API."""
+        payload = {
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params,
+            "id": 1
+        }
+
+        try:
+            response = requests.post(
+                self.base_url,
+                headers=self.headers,
+                data=json.dumps(payload),
+                timeout=60 # Increased timeout for potential large library exports
+            )
+            response.raise_for_status()
+            data = response.json()
+
+            if "error" in data:
+                error_msg = str(data['error'].get('message', 'Unknown error'))
+                error_data = data['error'].get('data', '')
+                if error_data:
+                    error_msg += f": {error_data}"
+                raise Exception(f"API error: {error_msg}")
+
+            return data.get("result", {})
+
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Connection error: {str(e)}. Is Zotero running with Better BibTeX installed?")
+
+    def is_zotero_running(self) -> bool:
+        """Check if Zotero is running and accessible."""
+        try:
+            response = requests.get(
+                f"http://127.0.0.1:{self.port}/better-bibtex/cayw?probe=true",
+                headers=self.headers,
+                timeout=5
+            )
+            return response.text == "ready"
+        except:
+            return False
+
+    def get_groups(self, include_collections: bool = False) -> List[Dict[str, Any]]:
         """
-        Performs a simple HTTP GET request.
-
+        List the libraries (groups) the user has in Zotero.
+        
         Args:
-            url: URL to fetch.
-            timeout: Request timeout in seconds.
-
+            include_collections: Whether to include a list of collections for each library.
+            
         Returns:
-            Response content as string or None on error.
+            A list of group/library dictionaries.
         """
         try:
-            ctx = ssl.create_default_context()
-            encoded_url = urllib.parse.quote(url, safe=":/?=&%+-.")
-            req = urllib.request.Request(
-                encoded_url, headers={"User-Agent": "PWA-CLI ZoteroClient/1.0 (Python)"}
-            )
-            with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
-                data = resp.read()
-                try:
-                    return data.decode("utf-8")
-                except UnicodeDecodeError:
-                    return data.decode("latin-1")
+            return self._make_rpc_request("user.groups", [include_collections])
         except Exception as e:
-            logger.warning(f"HTTP GET failed ({url}): {e}")
-            return None
+            logger.warning(f"Could not get groups: {e}")
+            return []
+
+    def view_pdf(self, item_id: str, page: int = 0) -> bool:
+        """
+        Open the PDF associated with an entry and jump to a specific page.
+        
+        Args:
+            item_id: The ID of the attachment item (e.g. http://zotero.org/users/123/items/ABC)
+            page: Page number, counting from zero (0 is first page).
+            
+        Returns:
+            True if successful, False otherwise.
+        """
+        try:
+            self._make_rpc_request("viewer.viewPDF", [item_id, page])
+            return True
+        except Exception as e:
+            logger.warning(f"Could not open PDF: {e}")
+            return False
+
+    def search(self, terms: Union[str, List[Any]] = "", library: Union[str, int, None] = None) -> List[Dict[str, Any]]:
+        """
+        Search for items in Zotero.
+        
+        Args:
+            terms: Search terms. 
+                  - Simple string: "quick search" (e.g., "Zotero 2024")
+                  - Advanced search: List of conditions (e.g., [['title', 'contains', 'Zotero']])
+                  - Logic: [['joinMode', 'any'], ['creator', 'contains', 'Smith'], ['title', 'contains', 'Zotero']]
+            library: Optional library name or ID to search in.
+            
+        Returns:
+            A list of matching items.
+            
+        Examples:
+            search("Zotero")  # Quick search
+            search([['title', 'contains', 'Zotero']])  # Search by title
+            search([['creator', 'contains', 'Smith'], ['date', 'contains', '2023']])  # AND search
+            search([['joinMode', 'any'], ['title', 'contains', 'AI'], ['abstract', 'contains', 'AI']]) # OR search
+        """
+        params = [terms]
+        if library is not None:
+            params.append(library)
+            
+        try:
+            return self._make_rpc_request("item.search", params)
+        except Exception as e:
+            logger.warning(f"Search failed for terms '{terms}': {e}")
+            return []
+
+    def get_item_by_citekey(self, citekey: str) -> Dict[str, Any]:
+        """Get item data by citation key."""
+        # Search for the item first
+        search_results = self.search(citekey)
+        if not search_results:
+            raise Exception(f"No items found with citekey: {citekey}")
+
+        item = next((item for item in search_results if item.get('citekey') == citekey), None)
+        if not item:
+            raise Exception(f"No exact match found for citekey: {citekey}")
+
+        try:
+            # BBT translator ID for Better BibTeX JSON
+            lib_id = item.get('libraryID')
+            
+            # API docs: item.export(citekeys, translator, libraryID?)
+            export_result = self._make_rpc_request(
+                "item.export",
+                [[citekey], "36a3b0b5-bad0-4a04-b79b-441c7cef77db", lib_id]
+            )
+
+            if export_result:
+                return self._parse_export_result(export_result).get('items', [])[0]
+
+            return item
+        except Exception as e:
+            logger.warning(f"Could not export full item data for {citekey}: {e}")
+            return item
+
+    def _parse_export_result(self, result: Any) -> Dict[str, Any]:
+        """
+        Parse the BBT export result, handling version differences.
+        Newer BBT versions (6.7.143+) removed an extra layer of wrapping.
+        """
+        if isinstance(result, str):
+            try:
+                return json.loads(result)
+            except:
+                return {"raw": result}
+        
+        # Handle older versions where result might be a list or have different structure
+        if isinstance(result, list):
+            # Try to find a string that looks like JSON
+            for item in result:
+                if isinstance(item, str) and (item.strip().startswith('{') or item.strip().startswith('[')):
+                    try:
+                        parsed = json.loads(item)
+                        if isinstance(parsed, dict): return parsed
+                    except: continue
+        
+        if isinstance(result, dict):
+            return result
+            
+        return {}
+
+    def get_attachments(self, citekey: str, library: Union[str, int] = '*') -> List[Dict[str, Any]]:
+        """
+        Get all attachments for an item.
+        'library' can be a libraryID or '*' for cross-library search.
+        """
+        try:
+            return self._make_rpc_request("item.attachments", [citekey, library])
+        except Exception as e:
+            logger.warning(f"Could not get attachments for {citekey}: {e}")
+            return []
+
+    def get_item_notes(self, citekey: str) -> List[Dict[str, str]]:
+        """Fetch the notes for a citekey."""
+        try:
+            notes_dict = self._make_rpc_request("item.notes", [[citekey]])
+            return notes_dict.get(citekey, [])
+        except Exception as e:
+            logger.warning(f"Could not get notes for {citekey}: {e}")
+            return []
+
+    def export_bibtex(self, citekeys: List[str], library_id: Optional[int] = None) -> str:
+        """Export BibTeX for a list of citekeys."""
+        try:
+            translator_id = "ca65189f-8815-4afe-8c8b-8c7c15f0edca" # Better BibTeX
+            params = [citekeys, translator_id]
+            if library_id is not None:
+                params.append(library_id)
+                
+            export_result = self._make_rpc_request("item.export", params)
+            
+            if isinstance(export_result, str):
+                return export_result
+            elif isinstance(export_result, list) and len(export_result) > 0:
+                return export_result[0] if isinstance(export_result[0], str) else str(export_result[0])
+            return str(export_result)
+        except Exception as e:
+            logger.error(f"Error exporting BibTeX: {e}")
+            return ""
 
     def fetch_biblatex(self) -> Optional[str]:
         """
-        Fetches BibLaTeX content if API is enabled.
-
-        Returns:
-            BibLaTeX content as string or None.
+        Fetch all regular reference items in BibLaTeX format from the library.
+        Implementation: Search for every item then export.
         """
-        if not self.config:
-            logger.warning("No Zotero configuration available")
+        try:
+            # item.search('') returns every entry according to docs
+            all_entries = self.search("")
+            
+            if not all_entries:
+                return None
+            
+            # We must provide citekeys to item.export
+            # BBT translator will automatically ignore items it can't export (like attachments)
+            citekeys = [item['citekey'] for item in all_entries if item.get('citekey')]
+            if not citekeys:
+                return None
+                
+            # Use BibLaTeX translator
+            translator_id = "f895aa0d-f28e-47fe-b924-4e9d281ef89d" # Better BibLaTeX
+            return self._make_rpc_request("item.export", [citekeys, translator_id])
+        except Exception as e:
+            logger.warning(f"fetch_biblatex failed: {e}")
             return None
 
-        zcfg = self.config.get("zotero") or self.config
-        if not zcfg.get("api_enabled"):
-            logger.info("Zotero API is not enabled")
-            return None
 
-        bib_url = zcfg.get("bibtex_url") or zcfg.get("bib_url")
-        if not bib_url:
-            logger.warning("No BibTeX URL configured")
-            return None
+def process_annotation(annotation: Dict[str, Any], attachment: Dict[str, Any], format_type: str = 'markdown') -> Dict[str, Any]:
+    """Process a raw Zotero annotation."""
+    try:
+        annotation_type = annotation.get('annotationType', 'unknown')
+        color = annotation.get('annotationColor', '')
+        text = annotation.get('annotationText', '')
+        comment = annotation.get('annotationComment', '')
+        page_label = annotation.get('annotationPageLabel', '1')
+        
+        page = 1
+        position = annotation.get('annotationPosition', {})
+        if isinstance(position, str):
+            try:
+                position = json.loads(position)
+            except:
+                position = {}
 
-        logger.info(f"Fetching BibLaTeX from Zotero API: {bib_url}")
-        return self._http_get(bib_url)
+        if position and 'pageIndex' in position:
+            page = position['pageIndex'] + 1
 
-    def fetch_csljson(self) -> Optional[str]:
-        """
-        Fetches CSL JSON content if API is enabled.
+        result = {
+            'id': annotation.get('key', ''),
+            'type': annotation_type,
+            'color': color,
+            'annotatedText': text,
+            'comment': comment,
+            'page': page,
+            'pageLabel': page_label,
+            'date': annotation.get('dateModified', ''),
+            'attachment': {
+                'key': attachment.get('itemKey', ''),
+                'filename': os.path.basename(attachment.get('path', '')),
+                'title': attachment.get('title', 'PDF'),
+                'path': attachment.get('path', ''),
+            }
+        }
 
-        Returns:
-            CSL JSON content as string or None.
-        """
-        if not self.config:
-            logger.warning("No Zotero configuration available")
-            return None
+        if format_type == 'markdown':
+            result['markdown'] = format_annotation_markdown(result)
+        return result
+    except Exception as e:
+        logger.error(f"Error processing annotation: {e}")
+        return {}
 
-        zcfg = self.config.get("zotero") or self.config
-        if not zcfg.get("api_enabled"):
-            logger.info("Zotero API is not enabled")
-            return None
 
-        json_url = zcfg.get("csl_json_url") or zcfg.get("csljson_url")
-        if not json_url:
-            logger.warning("No CSL JSON URL configured")
-            return None
-
-        logger.info(f"Fetching CSL JSON from Zotero API: {json_url}")
-        return self._http_get(json_url)
+def format_annotation_markdown(annotation: Dict[str, Any]) -> str:
+    """Format an annotation as markdown."""
+    md = []
+    if annotation['annotatedText']:
+        color_str = f" ({annotation['color']})" if annotation['color'] else ""
+        md.append(f"> \"{annotation['annotatedText']}\"{color_str} {annotation['type'].capitalize()} [Page {annotation['pageLabel']}]")
+    if annotation['comment']:
+        md.append(f"\n{annotation['comment']}")
+    return "\n".join(md)
 
 
 def fetch_preferred_references(
@@ -143,52 +356,27 @@ def fetch_preferred_references(
     zotero_config_path: Optional[str] = None,
 ) -> Tuple[Optional[str], Optional[str]]:
     """
-    Strategy function to fetch references from multiple sources.
-
-    Priority:
-    1. Try Zotero BibLaTeX API (contains 'file' field).
-    2. Try Zotero CSL JSON API.
-    3. Fallback to local file if provided.
-
-    Args:
-        local_ref_path: Path to local reference file.
-        zotero_config: Zotero configuration dictionary.
-        zotero_config_path: Path to zotero_config.yaml file.
-
-    Returns:
-        (content, type) where type is 'biblatex', 'csljson', or None.
+    Strategy function to fetch references.
     """
     client = ZoteroClient(config=zotero_config, config_path=zotero_config_path)
 
-    # 1. Try BibLaTeX via API
-    content = client.fetch_biblatex()
-    if content:
-        logger.info("Successfully fetched BibLaTeX from Zotero API")
-        return content, "biblatex"
+    if client.is_zotero_running():
+        content = client.fetch_biblatex()
+        if content:
+            logger.info("Successfully fetched references from local Zotero")
+            return content, "biblatex"
 
-    # 2. Try CSL JSON via API
-    content = client.fetch_csljson()
-    if content:
-        logger.info("Successfully fetched CSL JSON from Zotero API")
-        return content, "csljson"
-
-    # 3. Fallback to local file
     if local_ref_path and os.path.exists(local_ref_path):
         ext = os.path.splitext(local_ref_path)[1].lower()
         try:
             with open(local_ref_path, "r", encoding="utf-8") as f:
                 txt = f.read()
             if ext in [".bib", ".biblatex"]:
-                logger.info(f"Loaded BibLaTeX from local file: {local_ref_path}")
                 return txt, "biblatex"
             elif ext in [".json", ".csljson"]:
-                logger.info(f"Loaded CSL JSON from local file: {local_ref_path}")
                 return txt, "csljson"
-            else:
-                logger.warning(f"Unknown file extension: {ext}")
-                return txt, ext.lstrip(".")
+            return txt, ext.lstrip(".")
         except Exception as e:
             logger.error(f"Failed to read local file {local_ref_path}: {e}")
 
-    logger.warning("No references could be fetched from any source")
     return None, None
