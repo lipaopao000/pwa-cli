@@ -4,7 +4,7 @@ Client modules for external services
 This package contains client implementations for various external services.
 """
 
-from .markitdown_client import MarkItDownClient, convert_to_markdown
+from .markitdown import MarkItDownClient, convert_to_markdown
 from .mineru import MineruClient
 from .pubmed import PubMedClient
 from .ragflow import RagFlowClient as RAGFlowClient

@@ -99,8 +99,8 @@ class FullTextDownloadCommand(BaseCommand):
             Dictionary with execution results
         """
         try:
-            # Import Mineru client
-            from ..clients.mineru import FullTextProcessor, MineruClient
+            # Import FullTextProcessor
+            from ..core.fulltext import FullTextProcessor
 
             print_info("\n=== 开始全文获取 ===\n")
 
@@ -288,7 +288,7 @@ class FullTextRetryCommand(BaseCommand):
             return {"status": "no_tasks"}
 
         try:
-            from ..clients.mineru import FullTextProcessor
+            from ..core.fulltext import FullTextProcessor
 
             print_info("\n=== 重试失败任务 ===\n")
 

@@ -1,5 +1,5 @@
 """
-MarkItDown Client
+MarkItDown
 
 This module provides a client for converting documents to Markdown using the custom markitdown library.
 The markitdown library is cloned from GitHub and added to sys.path at runtime.

@@ -1,11 +1,11 @@
 """
-Tests for enhanced Mineru API client
+Tests for Mineru API client
 """
 
 import pytest
 from unittest.mock import Mock, patch, MagicMock
-from pwa.clients.mineru_enhanced import (
-    MineruEnhancedClient,
+from pwa.clients.mineru import (
+    MineruClient,
     MineruClientConfig,
     TaskOptions,
     MineruAPIError,
@@ -66,13 +66,13 @@ class TestTaskOptions:
         assert "seed" not in result
 
 
-class TestMineruEnhancedClient:
-    """Test MineruEnhancedClient"""
+class TestMineruClient:
+    """Test MineruClient"""
 
     @pytest.fixture
     def client(self):
         """Create test client"""
-        return MineruEnhancedClient(token="test_token")
+        return MineruClient(token="test_token")
 
     @pytest.fixture
     def mock_response(self):
@@ -94,7 +94,7 @@ class TestMineruEnhancedClient:
 
     def test_client_without_cache(self):
         """Test client without cache"""
-        client = MineruEnhancedClient(token="test_token", enable_cache=False)
+        client = MineruClient(token="test_token", enable_cache=False)
         assert client._cache is None
 
     @patch("requests.Session.request")

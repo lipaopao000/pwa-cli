@@ -1,4 +1,4 @@
-# MarkItDown 集成文档
+# MarkItDownClient 集成文档
 
 ## 概述
 
@@ -133,7 +133,7 @@ else:
 
 #### `__init__()`
 
-创建 MarkItDown 客户端实例。
+创建 MarkItDownClient 客户端实例。
 
 #### `convert_file(file_path: Union[str, Path]) -> str`
 

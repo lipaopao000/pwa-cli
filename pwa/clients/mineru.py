@@ -1,30 +1,61 @@
 """
-Mineru API client for full-text PDF to Markdown conversion
+Enhanced Mineru API client with full API v4 support
+Based on official API documentation: https://mineru.net/apiManage/docs
 """
 
 import hashlib
-import io
-import json
 import logging
-import os
-import zipfile
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from ..core.utils import parse_biblatex_content
-from .zotero import fetch_preferred_references
-
 # Constants
 MINERU_API_BASE_URL = "https://mineru.net/api/v4"
 MINERU_MODEL_VERSION = "vlm"
-TASK_STATUS_FILE = "fulltext_tasks.json"
+
+# Error code mappings
+ERROR_CODES = {
+    "A0202": "Token 错误",
+    "A0211": "Token 过期",
+    "-500": "传参错误",
+    "-10001": "服务异常",
+    "-10002": "请求参数错误",
+    "-60001": "生成上传 URL 失败",
+    "-60002": "获取匹配的文件格式失败",
+    "-60003": "文件读取失败",
+    "-60004": "空文件",
+    "-60005": "文件大小超出限制",
+    "-60006": "文件页数超过限制",
+    "-60007": "模型服务暂时不可用",
+    "-60008": "文件读取超时",
+    "-60009": "任务提交队列已满",
+    "-60010": "解析失败",
+    "-60011": "获取有效文件失败",
+    "-60012": "找不到任务",
+    "-60013": "没有权限访问该任务",
+    "-60014": "删除运行中的任务",
+    "-60015": "文件转换失败",
+    "-60016": "文件转换失败",
+    "-60017": "重试次数达到上线",
+    "-60018": "每日解析任务数量已达上限",
+    "-60019": "html文件解析额度不足",
+    "-60020": "文件拆分失败",
+    "-60021": "读取文件页数失败",
+    "-60022": "网页读取失败",
+}
+
+
+class MineruAPIError(Exception):
+    """MinerU API error"""
+
+    def __init__(self, code: str, message: str):
+        self.code = code
+        self.message = message
+        super().__init__(f"[{code}] {message}")
 
 
 @dataclass
@@ -47,6 +78,46 @@ class MineruClientConfig:
             raise ValueError("Mineru API token is required")
 
 
+@dataclass
+class TaskOptions:
+    """Options for creating parsing tasks"""
+
+    # Common options
+    is_ocr: bool = False
+    enable_formula: bool = True
+    enable_table: bool = True
+    language: str = "ch"
+    data_id: Optional[str] = None
+    callback: Optional[str] = None
+    seed: Optional[str] = None
+    extra_formats: Optional[List[str]] = None
+    page_ranges: Optional[str] = None
+    model_version: str = MINERU_MODEL_VERSION
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for API request"""
+        result = {
+            "is_ocr": self.is_ocr,
+            "enable_formula": self.enable_formula,
+            "enable_table": self.enable_table,
+            "language": self.language,
+            "model_version": self.model_version,
+        }
+
+        if self.data_id:
+            result["data_id"] = self.data_id
+        if self.callback:
+            result["callback"] = self.callback
+        if self.seed:
+            result["seed"] = self.seed
+        if self.extra_formats:
+            result["extra_formats"] = self.extra_formats
+        if self.page_ranges:
+            result["page_ranges"] = self.page_ranges
+
+        return result
+
+
 class SimpleCache:
     """Simple in-memory cache with TTL"""
 
@@ -56,6 +127,8 @@ class SimpleCache:
 
     def _generate_key(self, method: str, endpoint: str, **kwargs) -> str:
         """Generate cache key"""
+        import json
+
         key_data = f"{method}:{endpoint}:{json.dumps(kwargs, sort_keys=True)}"
         return hashlib.md5(key_data.encode()).hexdigest()
 
@@ -79,9 +152,13 @@ class SimpleCache:
         """Invalidate cached value"""
         self._cache.pop(key, None)
 
+    def clear(self):
+        """Clear all cached values"""
+        self._cache.clear()
+
 
 class MineruClient:
-    """Client for Mineru OCR API"""
+    """Client for Mineru API with full v4 support"""
 
     def __init__(self, token: str, enable_cache: bool = True, **kwargs):
         """
@@ -114,13 +191,14 @@ class MineruClient:
         session.mount("http://", adapter)
         session.mount("https://", adapter)
         session.headers.update(
-            {"Content-Type": "application/json", "Authorization": f"Bearer {self.config.token}"}
+            {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.config.token}",
+            }
         )
         return session
 
-    def _request(
-        self, method: str, endpoint: str, use_cache: bool = True, **kwargs
-    ) -> Optional[Dict]:
+    def _request(self, method: str, endpoint: str, use_cache: bool = True, **kwargs) -> Dict:
         """
         Make API request
 
@@ -131,7 +209,10 @@ class MineruClient:
             **kwargs: Additional request parameters
 
         Returns:
-            Response data or None on error
+            Response data
+
+        Raises:
+            MineruAPIError: If API returns error
         """
         url = f"{self.config.base_url}/{endpoint}"
         cache_key = None
@@ -147,64 +228,48 @@ class MineruClient:
             res.raise_for_status()
             result = res.json()
 
+            # Check API error code
+            if result.get("code") != 0:
+                code = str(result.get("code"))
+                msg = result.get("msg", ERROR_CODES.get(code, "Unknown error"))
+                raise MineruAPIError(code, msg)
+
             if cache_key and result:
                 self._cache.set(cache_key, result)
 
             return result
-        except Exception as e:
+        except requests.exceptions.RequestException as e:
             self.logger.error(f"[Mineru API] {method} {endpoint} failed: {e}")
-            return None
+            raise
+        except MineruAPIError:
+            raise
+        except Exception as e:
+            self.logger.error(f"[Mineru API] Unexpected error: {e}")
+            raise
 
-    def create_task(self, pdf_url: str) -> Optional[str]:
+    # ========== Single File Parsing ==========
+
+    def create_task(self, url: str, options: Optional[TaskOptions] = None) -> str:
         """
-        Create OCR task from PDF URL
+        Create single file parsing task
 
         Args:
-            pdf_url: URL to PDF file
+            url: File URL
+            options: Task options
 
         Returns:
-            Task ID or None on error
+            Task ID
+
+        Raises:
+            MineruAPIError: If API returns error
         """
-        data = {"url": pdf_url, "model_version": self.config.model_version}
+        options = options or TaskOptions()
+        data = {"url": url, **options.to_dict()}
+
         resp = self._request("POST", "extract/task", json=data, use_cache=False)
-        return resp["data"]["task_id"] if resp and resp.get("code") == 0 else None
+        return resp["data"]["task_id"]
 
-    def request_batch_upload_urls(
-        self, file_infos: List[Dict[str, str]]
-    ) -> Tuple[Optional[str], Optional[List[str]]]:
-        """
-        Request batch upload URLs for local files
-
-        Args:
-            file_infos: List of file info dicts with 'file_name' and 'citation_key'
-
-        Returns:
-            Tuple of (batch_id, upload_urls) or (None, None) on error
-        """
-        files_data = [
-            {"name": info["file_name"], "data_id": info["citation_key"]} for info in file_infos
-        ]
-        data = {"files": files_data, "model_version": self.config.model_version}
-        resp = self._request("POST", "file-urls/batch", json=data, use_cache=False)
-
-        if resp and resp.get("code") == 0:
-            return resp["data"]["batch_id"], resp["data"]["file_urls"]
-        return None, None
-
-    def get_batch_results(self, batch_id: str) -> Optional[List[Dict]]:
-        """
-        Get batch processing results
-
-        Args:
-            batch_id: Batch ID
-
-        Returns:
-            List of result dicts or None on error
-        """
-        resp = self._request("GET", f"extract-results/batch/{batch_id}")
-        return resp.get("data", {}).get("extract_result", []) if resp else None
-
-    def get_task_result(self, task_id: str) -> Optional[Dict]:
+    def get_task_result(self, task_id: str) -> Dict:
         """
         Get single task result
 
@@ -212,12 +277,122 @@ class MineruClient:
             task_id: Task ID
 
         Returns:
-            Result dict or None on error
+            Task result dict with keys:
+                - task_id: Task ID
+                - data_id: Data ID (if provided)
+                - state: Task state (done/pending/running/failed/converting)
+                - full_zip_url: Result ZIP URL (when done)
+                - err_msg: Error message (when failed)
+                - extract_progress: Progress info (when running)
+
+        Raises:
+            MineruAPIError: If API returns error
         """
         resp = self._request("GET", f"extract/task/{task_id}")
-        return resp.get("data") if resp else None
+        return resp["data"]
 
-    def download_result(self, download_url: str) -> Optional[bytes]:
+    # ========== Batch File Parsing ==========
+
+    def request_batch_upload_urls(
+        self, files: List[Dict[str, Any]], options: Optional[TaskOptions] = None
+    ) -> Tuple[str, List[str]]:
+        """
+        Request batch upload URLs for local files
+
+        Args:
+            files: List of file info dicts with keys:
+                - name: File name (required)
+                - data_id: Data ID (optional)
+                - is_ocr: Enable OCR (optional)
+                - page_ranges: Page ranges (optional)
+            options: Common task options (applied to all files)
+
+        Returns:
+            Tuple of (batch_id, upload_urls)
+
+        Raises:
+            MineruAPIError: If API returns error
+        """
+        options = options or TaskOptions()
+        data = {"files": files, **options.to_dict()}
+
+        resp = self._request("POST", "file-urls/batch", json=data, use_cache=False)
+        return resp["data"]["batch_id"], resp["data"]["file_urls"]
+
+    def upload_file(self, upload_url: str, file_path: str) -> bool:
+        """
+        Upload file to pre-signed URL
+
+        Args:
+            upload_url: Pre-signed upload URL
+            file_path: Local file path
+
+        Returns:
+            True if successful
+
+        Raises:
+            Exception: If upload fails
+        """
+        try:
+            with open(file_path, "rb") as f:
+                resp = requests.put(upload_url, data=f, timeout=self.config.timeout)
+                resp.raise_for_status()
+            return True
+        except Exception as e:
+            self.logger.error(f"Upload failed: {e}")
+            raise
+
+    def create_batch_url_tasks(
+        self, files: List[Dict[str, Any]], options: Optional[TaskOptions] = None
+    ) -> str:
+        """
+        Create batch parsing tasks from URLs
+
+        Args:
+            files: List of file info dicts with keys:
+                - url: File URL (required)
+                - data_id: Data ID (optional)
+                - is_ocr: Enable OCR (optional)
+                - page_ranges: Page ranges (optional)
+            options: Common task options (applied to all files)
+
+        Returns:
+            Batch ID
+
+        Raises:
+            MineruAPIError: If API returns error
+        """
+        options = options or TaskOptions()
+        data = {"files": files, **options.to_dict()}
+
+        resp = self._request("POST", "extract/task/batch", json=data, use_cache=False)
+        return resp["data"]["batch_id"]
+
+    def get_batch_results(self, batch_id: str) -> List[Dict]:
+        """
+        Get batch processing results
+
+        Args:
+            batch_id: Batch ID
+
+        Returns:
+            List of result dicts with keys:
+                - file_name: File name
+                - state: Task state
+                - full_zip_url: Result ZIP URL (when done)
+                - err_msg: Error message (when failed)
+                - data_id: Data ID (if provided)
+                - extract_progress: Progress info (when running)
+
+        Raises:
+            MineruAPIError: If API returns error
+        """
+        resp = self._request("GET", f"extract-results/batch/{batch_id}")
+        return resp["data"]["extract_result"]
+
+    # ========== Helper Methods ==========
+
+    def download_result(self, download_url: str) -> bytes:
         """
         Download result ZIP file
 
@@ -225,7 +400,10 @@ class MineruClient:
             download_url: URL to download from
 
         Returns:
-            ZIP file bytes or None on error
+            ZIP file bytes
+
+        Raises:
+            Exception: If download fails
         """
         try:
             resp = requests.get(download_url, timeout=self.config.timeout)
@@ -233,235 +411,75 @@ class MineruClient:
             return resp.content
         except Exception as e:
             self.logger.error(f"Download failed: {e}")
-            return None
+            raise
 
-
-class FullTextProcessor:
-    """Processor for full-text PDF to Markdown conversion"""
-
-    def __init__(self, output_dir: str = "FullTextMD", config_manager=None):
+    def wait_for_task(self, task_id: str, poll_interval: int = 5, max_wait: int = 600) -> Dict:
         """
-        Initialize processor
+        Wait for task to complete
 
         Args:
-            output_dir: Output directory for Markdown files
-            config_manager: Configuration manager instance
-        """
-        self.config_manager = config_manager
-        self.output_dir = Path(output_dir)
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Load API token
-        ocr_config = config_manager.load_config("ocr") if config_manager else {}
-        token = ocr_config.get("mineru_api_token")
-
-        if not token:
-            raise ValueError("Mineru API token not found in OCR_API.yaml")
-
-        self.client = MineruClient(token)
-        self.task_statuses = self._load_task_status()
-        self.references = []
-        self.logger = logging.getLogger(__name__)
-
-    def _load_task_status(self) -> Dict[str, Dict]:
-        """Load task status from file"""
-        if Path(TASK_STATUS_FILE).exists():
-            try:
-                with open(TASK_STATUS_FILE, "r", encoding="utf-8") as f:
-                    return json.load(f)
-            except Exception:
-                pass
-        return {}
-
-    def _save_task_status(self):
-        """Save task status to file"""
-        with open(TASK_STATUS_FILE, "w", encoding="utf-8") as f:
-            json.dump(self.task_statuses, f, indent=4, ensure_ascii=False)
-
-    def load_references_from_zotero(self):
-        """Load references from Zotero"""
-        self.logger.info("Loading references from Zotero...")
-
-        zotero_config_path = (
-            self.config_manager.get_config_path("zotero") if self.config_manager else None
-        )
-        content, ref_type = fetch_preferred_references(zotero_config_path=str(zotero_config_path))
-
-        if not content:
-            self.logger.error("Could not fetch references from Zotero")
-            return
-
-        self._parse_references(content, ref_type)
-
-    def load_references_from_bibtex(self, bibtex_path: str):
-        """Load references from BibTeX file"""
-        self.logger.info(f"Loading references from {bibtex_path}...")
-
-        with open(bibtex_path, "r", encoding="utf-8") as f:
-            content = f.read()
-
-        self._parse_references(content, "biblatex")
-
-    def _parse_references(self, content: str, ref_type: str):
-        """Parse references from content"""
-        if ref_type != "biblatex":
-            self.logger.warning(f"Unsupported reference format: {ref_type}")
-            return
-
-        parsed_refs = parse_biblatex_content(content)
-        self.references = []
-
-        for entry in parsed_refs:
-            citation_key = entry["ID"]
-            file_paths = entry.get("file_paths", [])
-
-            if file_paths:
-                # Local PDF file
-                path = file_paths[0]
-                self.references.append(
-                    {"citation_key": citation_key, "type": "local", "local_pdf_path": path}
-                )
-            elif entry.get("url") and entry["url"].lower().endswith(".pdf"):
-                # PDF URL
-                self.references.append(
-                    {"citation_key": citation_key, "type": "url", "pdf_url": entry["url"]}
-                )
-
-        self.logger.info(f"Parsed {len(self.references)} references with PDF")
-
-    def process_pending(self):
-        """Check and update pending tasks"""
-        self.logger.info("Checking pending tasks...")
-
-        # Check batch results
-        batch_ids = set(
-            v["batch_id"]
-            for v in self.task_statuses.values()
-            if v.get("batch_id")
-            and v.get("status") not in ["downloaded", "failed", "done", "upload_failed"]
-        )
-
-        for bid in batch_ids:
-            results = self.client.get_batch_results(bid)
-            if results:
-                for res in results:
-                    ckey = res.get("data_id")
-                    if ckey in self.task_statuses:
-                        self.task_statuses[ckey].update(res)
-                        self.task_statuses[ckey]["status"] = res.get("state")
-
-        # Check single task results
-        for key, v in self.task_statuses.items():
-            if v.get("task_id") and v.get("status") not in ["downloaded", "failed", "done"]:
-                res = self.client.get_task_result(v["task_id"])
-                if res:
-                    v.update(res)
-                    v["status"] = res.get("state")
-
-        self._save_task_status()
-
-    def submit_new_tasks(self, max_workers: int = 5):
-        """Submit new tasks for processing"""
-        self.logger.info("Submitting new tasks...")
-
-        # Filter references that need processing
-        to_process = [
-            ref
-            for ref in self.references
-            if ref["citation_key"] not in self.task_statuses
-            or self.task_statuses[ref["citation_key"]].get("status") == "pending"
-        ]
-
-        if not to_process:
-            self.logger.info("No new tasks to submit")
-            return
-
-        # Separate by type
-        url_refs = [r for r in to_process if r["type"] == "url"]
-        local_refs = [r for r in to_process if r["type"] == "local"]
-
-        # Submit URL tasks
-        for ref in url_refs:
-            task_id = self.client.create_task(ref["pdf_url"])
-            if task_id:
-                self.task_statuses[ref["citation_key"]] = {
-                    "task_id": task_id,
-                    "status": "processing",
-                    "type": "url",
-                }
-
-        # Submit local file batch (simplified - actual implementation would upload files)
-        if local_refs:
-            self.logger.warning("Local file upload not fully implemented yet")
-
-        self._save_task_status()
-
-    def download_results(self, max_workers: int = 5) -> int:
-        """
-        Download completed results
-
-        Args:
-            max_workers: Maximum concurrent downloads
+            task_id: Task ID
+            poll_interval: Polling interval in seconds
+            max_wait: Maximum wait time in seconds
 
         Returns:
-            Number of successfully downloaded files
+            Final task result
+
+        Raises:
+            TimeoutError: If task doesn't complete within max_wait
+            MineruAPIError: If task fails
         """
-        self.logger.info("Downloading results...")
+        import time
 
-        # Find tasks ready for download
-        to_download = [
-            (key, task)
-            for key, task in self.task_statuses.items()
-            if task.get("status") == "done" and task.get("download_url")
-        ]
+        start_time = time.time()
 
-        if not to_download:
-            self.logger.info("No results ready for download")
-            return 0
+        while True:
+            result = self.get_task_result(task_id)
+            state = result["state"]
 
-        downloaded_count = 0
+            if state == "done":
+                return result
+            elif state == "failed":
+                raise MineruAPIError("-60010", result.get("err_msg", "解析失败"))
+            elif time.time() - start_time > max_wait:
+                raise TimeoutError(f"Task {task_id} timeout after {max_wait}s")
 
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = {
-                executor.submit(self._download_single, key, task): key for key, task in to_download
-            }
+            time.sleep(poll_interval)
 
-            for future in as_completed(futures):
-                key = futures[future]
-                try:
-                    if future.result():
-                        downloaded_count += 1
-                        self.task_statuses[key]["status"] = "downloaded"
-                except Exception as e:
-                    self.logger.error(f"Download failed for {key}: {e}")
-                    self.task_statuses[key]["status"] = "failed"
+    def wait_for_batch(
+        self, batch_id: str, poll_interval: int = 10, max_wait: int = 1800
+    ) -> List[Dict]:
+        """
+        Wait for batch tasks to complete
 
-        self._save_task_status()
-        return downloaded_count
+        Args:
+            batch_id: Batch ID
+            poll_interval: Polling interval in seconds
+            max_wait: Maximum wait time in seconds
 
-    def _download_single(self, key: str, task: Dict) -> bool:
-        """Download single result"""
-        download_url = task.get("download_url")
-        if not download_url:
-            return False
+        Returns:
+            Final batch results
 
-        # Download ZIP
-        zip_content = self.client.download_result(download_url)
-        if not zip_content:
-            return False
+        Raises:
+            TimeoutError: If tasks don't complete within max_wait
+        """
+        import time
 
-        # Extract ZIP
-        try:
-            with zipfile.ZipFile(io.BytesIO(zip_content)) as zf:
-                # Create output directory for this paper
-                paper_dir = self.output_dir / key
-                paper_dir.mkdir(parents=True, exist_ok=True)
+        start_time = time.time()
 
-                # Extract all files
-                zf.extractall(paper_dir)
+        while True:
+            results = self.get_batch_results(batch_id)
 
-                self.logger.info(f"Downloaded: {key}")
-                return True
-        except Exception as e:
-            self.logger.error(f"Extract failed for {key}: {e}")
-            return False
+            # Check if all tasks are done or failed
+            all_done = all(r["state"] in ("done", "failed") for r in results)
+
+            if all_done:
+                return results
+            elif time.time() - start_time > max_wait:
+                raise TimeoutError(f"Batch {batch_id} timeout after {max_wait}s")
+
+            time.sleep(poll_interval)
+
+    def get_error_message(self, code: str) -> str:
+        """Get error message for error code"""
+        return ERROR_CODES.get(code, "Unknown error")

@@ -1,5 +1,5 @@
 """
-Tests for MarkItDown Client
+Tests for MarkItDownClient Client
 """
 
 import pytest
@@ -7,7 +7,7 @@ from pathlib import Path
 import tempfile
 import shutil
 
-from pwa.clients.markitdown_client import MarkItDownClient, convert_to_markdown
+from pwa.clients.markitdown import MarkItDownClient, convert_to_markdown
 
 
 @pytest.fixture
@@ -37,7 +37,7 @@ And some more text.
 
 @pytest.fixture
 def client():
-    """Create a MarkItDown client instance."""
+    """Create a MarkItDownClient client instance."""
     return MarkItDownClient()
 
 
