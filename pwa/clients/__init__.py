@@ -9,6 +9,7 @@ from .mineru import MineruClient
 from .pubmed import PubMedClient
 from .ragflow import RagFlowClient as RAGFlowClient
 from .zotero import ZoteroClient, fetch_preferred_references
+from .zotero_mcp_adapter import ZoteroMCPClient, create_zotero_mcp_client
 
 __all__ = [
     "MarkItDownClient",
@@ -18,4 +19,6 @@ __all__ = [
     "RAGFlowClient",
     "ZoteroClient",
     "fetch_preferred_references",
+    "ZoteroMCPClient",
+    "create_zotero_mcp_client",
 ]

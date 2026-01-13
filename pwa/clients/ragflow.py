@@ -13,12 +13,19 @@ if os.path.exists(ragflow_sdk_path) and ragflow_sdk_path not in sys.path:
 
 try:
     from ragflow_sdk import RAGFlow
+
+    RAGFLOW_AVAILABLE = True
 except ImportError as e:
-    raise ImportError(
+    RAGFLOW_AVAILABLE = False
+    RAGFLOW_IMPORT_ERROR = (
         f"Failed to import ragflow_sdk: {e}\n"
         f"Please run: ./scripts/install_ragflow_sdk.sh\n"
         f"Or manually clone: git clone https://github.com/infiniflow/ragflow.git {project_root}/.ragflow"
     )
+
+    # Create a dummy RAGFlow class to avoid NameError
+    class RAGFlow:
+        pass
 
 
 class RagFlowClient:
@@ -28,6 +35,9 @@ class RagFlowClient:
     """
 
     def __init__(self, base_url, api_key):
+        if not RAGFLOW_AVAILABLE:
+            raise ImportError(RAGFLOW_IMPORT_ERROR)
+
         # SDK expects base_url without /api/v1
         self.base_url = base_url.rstrip("/")
         if self.base_url.endswith("/api/v1"):
