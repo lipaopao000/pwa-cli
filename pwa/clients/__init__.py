@@ -8,6 +8,7 @@ from .markitdown import MarkItDownClient, convert_to_markdown
 from .mineru import MineruClient
 from .pubmed import PubMedClient
 from .ragflow import RagFlowClient as RAGFlowClient
+from .weknora import WeKnoraClient
 from .zotero import ZoteroClient, fetch_preferred_references
 
 __all__ = [
@@ -16,6 +17,7 @@ __all__ = [
     "MineruClient",
     "PubMedClient",
     "RAGFlowClient",
+    "WeKnoraClient",
     "ZoteroClient",
     "fetch_preferred_references",
 ]

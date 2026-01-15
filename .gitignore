@@ -139,6 +139,7 @@ FullTextMD/
 *.log
 .ragflow/
 .markitdown/
+.weknora/
 
 # Test files
 tests/test_files/
@@ -152,6 +153,3 @@ configs/*.yaml
 *.tmp
 *.bak
 *.orig
-
-# Zotero-MCP installation
-.zotero-mcp/
