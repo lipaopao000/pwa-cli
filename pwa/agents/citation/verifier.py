@@ -427,9 +427,4 @@ class ScientificStatementVerifier:
         return self.workflow.invoke(initial_state)
 
 
-def parse_markdown_to_statements(content: str) -> List[Dict[str, Any]]:
-    # Keep original parsing logic as it was working fine
-    # (Omitted here for brevity in the replacement call, but I will ensure it remains in the file)
-    from .statement_verifier_utils import parse_markdown_to_statements as original_parse
-
-    return original_parse(content)
+# Note: parse_markdown_to_statements is now in utils.py to avoid duplication

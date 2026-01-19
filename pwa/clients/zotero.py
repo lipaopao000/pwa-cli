@@ -4,15 +4,68 @@ zotero_client.py
 
 Client for interacting with Zotero via Better BibTeX JSON-RPC API.
 Provides direct access to Zotero's annotations without requiring PDF extraction.
+
+Data Structure Overview:
+- Item data: CSL-JSON format with citekey and library fields added by Better BibTeX
+- Annotations: Enhanced with coordinates (x, y), image paths, and structured attachment info
+- Notes: HTML strings (not objects) as returned by Better BibTeX API
+- Attachments: Include annotation arrays with raw Zotero annotation data
+
+API Behavior Notes:
+- All methods return data structures based on Better BibTeX JSON-RPC API responses
+- Search uses CSL-JSON format with BBT extensions
+- Annotations include position data with pageIndex and rects coordinates
+- Image annotations provide annotationImagePath when available
 """
 
 import json
 import logging
 import os
 import requests
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union, TypedDict
 
 logger = logging.getLogger(__name__)
+
+# Type definitions for better type safety
+class CSLItem(TypedDict, total=False):
+    """CSL-JSON item format with Better BibTeX extensions."""
+    id: str
+    type: str  # item type like 'article-journal', 'book', etc.
+    title: str
+    author: List[Dict[str, str]]  # [{'family': 'Smith', 'given': 'John'}]
+    issued: Dict[str, List[List[int]]]  # {'date-parts': [[2023, 1, 15]]}
+    publisher: str
+    volume: str
+    issue: str
+    page: str
+    DOI: str
+    URL: str
+    abstract: str
+    # Better BibTeX extensions
+    citekey: str  # BBT generated citation key
+    library: str  # library name (e.g., 'My Library')
+    # Note: 'container-title' is accessed via item.get('container-title')
+
+class AttachmentInfo(TypedDict):
+    key: str
+    filename: str
+    title: str
+    path: Union[str, bool]  # path can be a string or False
+
+class ProcessedAnnotation(TypedDict):
+    id: str
+    type: str
+    color: str
+    annotatedText: str
+    comment: str
+    page: int
+    pageLabel: str
+    x: float
+    y: float
+    date: str
+    imagePath: str
+    attachment: AttachmentInfo
+    markdown: str
 
 
 class ZoteroClient:
@@ -144,7 +197,7 @@ class ZoteroClient:
             logger.warning(f"Could not open PDF: {e}")
             return False
 
-    def search(self, terms: Union[str, List[Any]] = "", library: Union[str, int, None] = None) -> List[Dict[str, Any]]:
+    def search(self, terms: Union[str, List[Any]] = "", library: Union[str, int, None] = None) -> List[CSLItem]:
         """
         Search for items in Zotero.
         
@@ -174,34 +227,30 @@ class ZoteroClient:
             logger.warning(f"Search failed for terms '{terms}': {e}")
             return []
 
-    def get_item_by_citekey(self, citekey: str) -> Dict[str, Any]:
-        """Get item data by citation key."""
-        # Search for the item first
-        search_results = self.search(citekey)
-        if not search_results:
-            raise Exception(f"No items found with citekey: {citekey}")
+    def get_item_by_citekey(self, citekey: str) -> CSLItem:
+        """Get item data by citation key.
 
-        item = next((item for item in search_results if item.get('citekey') == citekey), None)
-        if not item:
-            raise Exception(f"No exact match found for citekey: {citekey}")
-
+        Returns:
+            CSL-JSON formatted item data (standardized format from Better BibTeX).
+            Includes citekey and library information as per BBT API behavior.
+        """
+        # Use exact citekey search - BBT API supports this directly
         try:
-            # BBT translator ID for Better BibTeX JSON
-            lib_id = item.get('libraryID')
-            
-            # API docs: item.export(citekeys, translator, libraryID?)
-            export_result = self._make_rpc_request(
-                "item.export",
-                [[citekey], "36a3b0b5-bad0-4a04-b79b-441c7cef77db", lib_id]
-            )
+            # Try exact citekey match first
+            search_results = self.search([['citationKey', 'is', citekey]])
+            if search_results:
+                return search_results[0]
 
-            if export_result:
-                return self._parse_export_result(export_result).get('items', [])[0]
+            # Fallback to contains search (case-insensitive behavior)
+            search_results = self.search(citekey)
+            item = next((item for item in search_results if item.get('citekey') == citekey), None)
+            if item:
+                return item
 
-            return item
         except Exception as e:
-            logger.warning(f"Could not export full item data for {citekey}: {e}")
-            return item
+            logger.warning(f"Could not find item with citekey {citekey}: {e}")
+
+        raise Exception(f"No items found with citekey: {citekey}")
 
     def _parse_export_result(self, result: Any) -> Dict[str, Any]:
         """
@@ -240,8 +289,12 @@ class ZoteroClient:
             logger.warning(f"Could not get attachments for {citekey}: {e}")
             return []
 
-    def get_item_notes(self, citekey: str) -> List[Dict[str, str]]:
-        """Fetch the notes for a citekey."""
+    def get_item_notes(self, citekey: str) -> List[str]:
+        """Fetch the notes for a citekey.
+
+        Returns:
+            List of HTML note strings (based on Better BibTeX API behavior).
+        """
         try:
             notes_dict = self._make_rpc_request("item.notes", [[citekey]])
             return notes_dict.get(citekey, [])
@@ -294,25 +347,73 @@ class ZoteroClient:
             return None
 
 
-def process_annotation(annotation: Dict[str, Any], attachment: Dict[str, Any], format_type: str = 'markdown') -> Dict[str, Any]:
-    """Process a raw Zotero annotation."""
+def process_annotation(annotation: Dict[str, Any], attachment: Dict[str, Any], format_type: str = 'markdown') -> ProcessedAnnotation:
+    """
+    Process a raw Zotero annotation into a more usable format.
+
+    Enhanced to support coordinates and image annotations based on Better BibTeX API behavior.
+
+    Args:
+        annotation: The raw annotation data from Zotero
+        attachment: The attachment this annotation belongs to
+        format_type: Output format ('raw' or 'markdown')
+
+    Returns:
+        A processed annotation object with enhanced coordinate and image support.
+    """
     try:
         annotation_type = annotation.get('annotationType', 'unknown')
         color = annotation.get('annotationColor', '')
+
+        # Extract text content
         text = annotation.get('annotationText', '')
         comment = annotation.get('annotationComment', '')
+
+        # Handle page information
         page_label = annotation.get('annotationPageLabel', '1')
-        
         page = 1
+
+        # Get position data and coordinates
         position = annotation.get('annotationPosition', {})
+        x, y = 0, 0
+
         if isinstance(position, str):
             try:
                 position = json.loads(position)
             except:
                 position = {}
 
-        if position and 'pageIndex' in position:
-            page = position['pageIndex'] + 1
+        if position:
+            # Get page index if available
+            if 'pageIndex' in position:
+                page = position['pageIndex'] + 1
+
+            # Get coordinates if available (rects contain bounding box coordinates)
+            if 'rects' in position and position['rects'] and len(position['rects'][0]) >= 2:
+                x, y = position['rects'][0][0], position['rects'][0][1]
+
+        # Handle image annotations (BBT API provides annotationImagePath)
+        image_path = annotation.get('annotationImagePath', '')
+
+        # Extract attachment information from actual API response structure
+        # API returns: {"open": "zotero://open-pdf/library/items/ITEMKEY", "path": "/path/to/file.pdf"}
+        attachment_key = ''
+        if 'open' in attachment and attachment['open']:
+            # Extract itemKey from URL: zotero://open-pdf/library/items/ITEMKEY
+            open_url = attachment['open']
+            if 'items/' in open_url:
+                attachment_key = open_url.split('items/')[-1]
+
+        attachment_path = attachment.get('path', '')
+        attachment_filename = ''
+        attachment_title = 'PDF'  # Default title
+
+        if attachment_path and attachment_path != False:
+            attachment_filename = os.path.basename(attachment_path)
+            # Use filename (without extension) as title
+            attachment_title = os.path.splitext(attachment_filename)[0]
+        elif attachment_key:
+            attachment_title = f"PDF ({attachment_key})"
 
         result = {
             'id': annotation.get('key', ''),
@@ -322,17 +423,22 @@ def process_annotation(annotation: Dict[str, Any], attachment: Dict[str, Any], f
             'comment': comment,
             'page': page,
             'pageLabel': page_label,
+            'x': x,
+            'y': y,
             'date': annotation.get('dateModified', ''),
+            'imagePath': image_path,  # For image annotations
             'attachment': {
-                'key': attachment.get('itemKey', ''),
-                'filename': os.path.basename(attachment.get('path', '')),
-                'title': attachment.get('title', 'PDF'),
-                'path': attachment.get('path', ''),
+                'key': attachment_key,
+                'filename': attachment_filename,
+                'title': attachment_title,
+                'path': attachment_path,
             }
         }
 
+        # If markdown format is requested, format the output
         if format_type == 'markdown':
             result['markdown'] = format_annotation_markdown(result)
+
         return result
     except Exception as e:
         logger.error(f"Error processing annotation: {e}")

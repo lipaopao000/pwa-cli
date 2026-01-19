@@ -143,9 +143,8 @@ class VerifyStatementsCommand(BaseCommand):
         try:
             from tqdm import tqdm
 
-            from ..agents.citation import get_fulltext_md_path, load_fulltext_md_content
             from ..agents.citation.statement_verifier import ScientificStatementVerifier
-            from ..agents.citation.utils import parse_markdown_to_statements
+            from ..agents.citation.utils import parse_markdown_to_statements, get_fulltext_md_path, load_fulltext_md_content
             from ..clients.pubmed import PubMedClient
             from ..clients.ragflow import RagFlowClient
             from ..clients.zotero import fetch_preferred_references
@@ -283,7 +282,16 @@ class VerifyStatementsCommand(BaseCommand):
 
             # Annotate markdown
             print_info("\n正在生成带注释的 Markdown...")
-            annotated_path = self._annotate_markdown(md_file, results, output_path)
+            from ..agents.citation.utils import annotate_markdown_with_results
+
+            with open(md_file, "r", encoding="utf-8") as f:
+                md_content = f.read()
+
+            annotated_content = annotate_markdown_with_results(md_content, results)
+            annotated_path = output_path / f"{base}-Verified.md"
+            with open(annotated_path, "w", encoding="utf-8") as f:
+                f.write(annotated_content)
+
             print_success(f"已生成: {annotated_path}")
 
             # Show summary
